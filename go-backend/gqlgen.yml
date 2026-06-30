@@ -1,0 +1,19 @@
+# Where your human-written text schemas sit
+schema:
+  - internal/graph/schema/*.graphqls
+
+# Where the auto-generated plumbing execution file goes
+exec:
+  filename: internal/graph/generated.go
+  package: graph
+
+# Where your auto-generated GraphQL model types go
+model:
+  filename: internal/graph/model/models_gen.go
+  package: model
+
+# Where your hand-written feature resolvers sit (FIXED TO THE MAIN GRAPH ROOM)
+resolver:
+  layout: follow-schema
+  dir: internal/graph/resolvers
+  package: graph

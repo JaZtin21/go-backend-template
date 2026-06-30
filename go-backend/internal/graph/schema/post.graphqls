@@ -1,0 +1,39 @@
+type Post {
+  id: ID!
+  title: String!
+  content: String!
+  userId: String!
+  createdAt: String!
+}
+type PaginatedPosts {
+  posts: [Post!]!
+  totalCount: Int!
+  hasNextPage: Boolean!
+}
+input CreatePostInput {
+  title: String!
+  content: String!
+}
+
+input UpdatePostInput {
+  id: ID!
+  title: String!
+  content: String!
+}
+
+directive @isAuthenticated on FIELD_DEFINITION
+
+extend type Query {
+  # Public feed with cursor/offset parameters
+  getPosts(limit: Int!, offset: Int!): PaginatedPosts!
+  
+  # Single public post view
+  getPostById(id: ID!): Post
+}
+
+# 4. Mutations (Private) - CHANGE TO EXTEND 🌟
+extend type Mutation {
+  createPost(input: CreatePostInput!): Post! @isAuthenticated
+  updatePost(input: UpdatePostInput!): Post! @isAuthenticated
+  deletePost(id: ID!): Boolean!
+}

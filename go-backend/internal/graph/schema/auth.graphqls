@@ -1,0 +1,39 @@
+input GoogleLoginInput {
+  code: String! # <-- Change this to accept the one-time code from React
+}
+
+# The payload returned back to your React client
+type AuthResponse {
+  user: User!
+  accessToken: String!
+}
+
+# A basic User type for the API contract wrapper
+type User {
+  id: String!
+  firstName: String!
+  lastName: String!
+  email: String!
+  profilePhoto: String!
+}
+
+extend type Mutation {
+  # The endpoint your React app will hit to sync and cache the user session
+  loginWithGoogle(input: GoogleLoginInput!): AuthResponse!
+}
+
+# Append this to your existing schema types layout
+type RefreshResponse {
+  accessToken: String!
+  user: User!
+}
+
+extend type Mutation {
+  # Swaps the HttpOnly cookie for a fresh, live Redis access token
+  refreshToken: RefreshResponse!
+}
+
+extend type Mutation {
+  # Wipes the Redis cache key and clears out the HTTP-Only cookie stream
+  logout: Boolean!
+}
