@@ -2,10 +2,12 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface UiState {
     isSidebarOpen: boolean;
+    isAddShopModalOpen: boolean; // 👈 Add this line
 }
 
 const initialState: UiState = {
     isSidebarOpen: false,
+    isAddShopModalOpen: false, // 👈 Add this line
 };
 
 export const uiSlice = createSlice({
@@ -18,11 +20,13 @@ export const uiSlice = createSlice({
         setSidebarOpen: (state, action: PayloadAction<boolean>) => {
             state.isSidebarOpen = action.payload;
         },
+        // 👇 Add these actions to control the modal globally
+        setAddShopModalOpen: (state, action: PayloadAction<boolean>) => {
+            state.isAddShopModalOpen = action.payload;
+        },
     },
 });
 
-// Export the actions so your buttons can trigger them
-export const { toggleSidebar, setSidebarOpen } = uiSlice.actions;
+export const { toggleSidebar, setSidebarOpen, setAddShopModalOpen } = uiSlice.actions;
 
-// Export the reducer to register it in the main store
 export default uiSlice.reducer;

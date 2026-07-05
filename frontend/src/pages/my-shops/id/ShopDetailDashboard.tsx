@@ -106,12 +106,11 @@ export const ShopDetailDashboard = () => {
     };
 
     return (
-        <div className="min-h-screen bg-bg-secondary p-6 transition-colors duration-300">
-
+        <div className="min-h-screen bg-bg-secondary transition-colors duration-300 pb-12">
 
 
             {/* --- COMMAND IMPLEMENTED: GO BACK STRIP ON TOP OF CHART CONTAINER --- */}
-            <div className="flex justify-between items-center mb-2 px-2  mt-12">
+            <div className="flex justify-between items-center px-2 ">
                 <button
                     onClick={() => navigate(-1)}
                     className="flex text-text-muted hover:text-text-main transition-colors duration-200 items-center gap-1.5 h-8  rounded-xl text-text-sub text-xs font-bold transition-all duration-200 cursor-pointer active:scale-98 border border-transparent"
@@ -225,7 +224,7 @@ export const ShopDetailDashboard = () => {
             {/* --- COMPLETE ACTIONS GRID SECTION (Matches 5 buttons layout structure) --- */}
             {/* --- ACTION GRID: 5 BUTTONS FROM IMAGE --- */}
             {/* --- ACTION GRID: 5 BUTTONS (Matches Shop Card Layout Styles) --- */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2  md:grid-cols-4 gap-6">
 
                 {/* 1. Someone is buying (Modal Trigger) */}
                 <div
@@ -256,7 +255,7 @@ export const ShopDetailDashboard = () => {
 
                 {/* 3. Manage Inventory (Subroute Navigation Anchor) */}
                 <a
-                    href={`/my-shops/${shopId}/inventory`}
+                    onClick={() => navigate(`/my-shops/${shopId}/inventory`)}
                     className="flex flex-col bg-bg-primary rounded-2xl p-5 shadow-xs transition-all duration-300 hover:shadow-md hover:bg-bg-primary-hover cursor-pointer no-underline border border-transparent"
                 >
                     <div className="w-full aspect-video bg-bg-secondary rounded-xl mb-4 shrink-0 flex items-center justify-center">
@@ -269,7 +268,7 @@ export const ShopDetailDashboard = () => {
 
                 {/* 4. View Inquiries (Subroute Navigation Anchor) */}
                 <a
-                    href={`/my-shops/${shopId}/inquiries`}
+                    onClick={() => navigate(`/my-shops/${shopId}/inquiries`)}
                     className="flex flex-col bg-bg-primary rounded-2xl p-5 shadow-xs transition-all duration-300 hover:shadow-md hover:bg-bg-primary-hover cursor-pointer no-underline border border-transparent"
                 >
                     <div className="w-full aspect-video bg-bg-secondary rounded-xl mb-4 shrink-0 flex items-center justify-center">

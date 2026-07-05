@@ -16,7 +16,6 @@ export const Layout: React.FC = () => {
 
     // 1. ADDED: Shared state to manage sidebar expansion across header and sidebar boundaries
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [addShopTicker, setAddShopTicker] = useState(0);
 
     const isMainMapPage = location.pathname === '/';
 
@@ -28,18 +27,17 @@ export const Layout: React.FC = () => {
                 isAuthenticated={isAuthenticated}
                 userInfo={userInfo}
                 logoutAndClear={logoutAndClear}
-                onAddShopClick={() => setAddShopTicker((prev) => prev + 1)}
                 isSidebarOpen={isSidebarOpen}
                 setIsSidebarOpen={setIsSidebarOpen}
             />
 
             {/* LOWER CONTAINER WORKSPACE */}
-            <div className="flex flex-1 relative overflow-hidden">
+            <div className="flex flex-1 relative overflow-hidden bg-bg-secondary ">
                 {/* 2. Pass shared states down as explicit reactive parameters */}
                 <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
 
                 {/* 3. FIXED mobile offset padding constraints: pl-0 on mobile, pl-16 on tablet/desktop */}
-                <main className="relative flex flex-1 flex-col pl-0 md:pl-16 h-full w-full bg-bg-primary dark:bg-bg-secondary transition-all duration-200">
+                <main className="relative flex flex-1 flex-col pl-0 md:pl-12 h-full w-full bg-bg-secondary transition-all duration-200 overflow-hidden">
 
                     {/* MAP ENGINE CANVAS LAYER */}
                     <MapCanvas
@@ -50,8 +48,9 @@ export const Layout: React.FC = () => {
 
                     {/* DYNAMIC CHILD INJECTION ROUTE PANEL */}
                     {!isMainMapPage && (
-                        <div className="absolute inset-0 top-0 left-0 md:left-16 right-0 bottom-0 h-full bg-bg-primary dark:bg-bg-secondary z-10 overflow-y-auto">
-                            <Outlet context={{ triggerAddShop: addShopTicker }} />
+                        /* 💡 FIX: Keep overflow-y-auto but use full flex dimensions instead of absolute layouts */
+                        <div className="w-full h-full overflow-y-auto z-10 md:px-12 px-4 md:pt-18 pt-18 pb-8">
+                            <Outlet />
                         </div>
                     )}
                 </main>

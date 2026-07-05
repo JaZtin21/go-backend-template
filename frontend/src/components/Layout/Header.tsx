@@ -2,12 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Sun, Moon, Plus, Menu } from 'lucide-react'; // 1. ADDED: Menu icon
 import { useTheme } from '../ThemeProvider';
+import { useDispatch } from 'react-redux';
+import { setAddShopModalOpen } from '../../store/uiSlice';
 
 interface HeaderProps {
     isAuthenticated: boolean;
     userInfo: { firstName: string; lastName: string; avatarUrl?: string } | null;
     logoutAndClear: () => void;
-    onAddShopClick: () => void;
     isSidebarOpen: boolean;       // 2. ADDED: state parameter mapping
     setIsSidebarOpen: (open: boolean) => void;
 }
@@ -16,7 +17,6 @@ export const Header: React.FC<HeaderProps> = ({
     isAuthenticated,
     userInfo,
     logoutAndClear,
-    onAddShopClick,
     isSidebarOpen,
     setIsSidebarOpen
 }) => {
@@ -25,9 +25,16 @@ export const Header: React.FC<HeaderProps> = ({
     const { theme, toggleTheme } = useTheme();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const dispatch = useDispatch();
+
+    const onAddShopClick = () => {
+        // Dispatch the action to open the Add Shop modal
+        dispatch(setAddShopModalOpen(true));
+    }
 
     const isMainMapPage = routerLocation.pathname === '/';
     const isMyShopsPage = routerLocation.pathname === '/my-shops' || routerLocation.pathname.startsWith('/my-shops/');
+    const isSubShopPage = routerLocation.pathname.startsWith('/my-shops/');
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -41,7 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
 
     return (
         <header
-            className={`absolute top-0 right-0 left-0 z-30 flex h-14 w-full items-center justify-between pr-4 pl-2 md:pl-16 transition-all duration-200 ${isMainMapPage
+            className={`absolute top-0 right-0 left-0 z-30 flex h-14 items-center justify-between pr-4 pl-2 md:pl-16 transition-all duration-200 ${isMainMapPage
                 ? 'bg-transparent pointer-events-none'
                 : 'bg-bg-primary  shadow-xs pointer-events-auto'
                 }`}
@@ -57,17 +64,21 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
                 {isMyShopsPage ? (
                     /* --- BLUEPRINT DESIGN B: MY SHOPS CONTENT MODE HOOK --- */
-                    <div className="flex items-center gap-4 pl-4 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-4 md:pl-4 animate-in fade-in duration-200">
                         <h1 className="text-lg font-bold text-text-main whitespace-nowrap">
                             My shops
                         </h1>
-                        <button
-                            onClick={onAddShopClick}
-                            className="flex h-7 items-center text-text-white gap-1 rounded-full bg-brand-gold hover:bg-brand-gold-hover px-3 transition-color duration-200 text-[11px] font-semibold text-text-sub  cursor-pointer"
-                        >
-                            <Plus size={12} strokeWidth={4} />
-                            Add Shop
-                        </button>
+                        {
+                            !isSubShopPage &&
+                            <button
+                                onClick={onAddShopClick}
+                                className="flex h-7 items-center text-text-white gap-1 rounded-full bg-brand-gold hover:bg-brand-gold-hover px-3 transition-color duration-200 text-[11px] font-semibold text-text-sub  cursor-pointer"
+                            >
+                                <Plus size={12} strokeWidth={4} />
+                                Add Shop
+                            </button>
+                        }
+
                     </div>
                 ) : (
                     /* --- BLUEPRINT DESIGN A: CORE MAP SEARCH ENVIRONMENT --- */
@@ -100,7 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="relative">
                     <button
                         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                        className="h-9 w-9 rounded-full bg-[#d37e7e] shadow-xs cursor-pointer flex items-center justify-center font-bold text-white text-xs overflow-hidden border border-white/20 transition-transform active:scale-95"
+                        className="h-9 w-9 rounded-full bg-bg-secondary shadow-xs cursor-pointer flex items-center justify-center font-bold text-white text-xs overflow-hidden border border-white/20 transition-transform active:scale-95"
                     >
                         {userInfo?.avatarUrl ? (
                             <img src={userInfo.avatarUrl} alt="Profile" className="h-full w-full object-cover" />

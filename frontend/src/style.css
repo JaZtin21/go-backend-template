@@ -10,6 +10,12 @@
     --color-bg-secondary: #f9fafb;
     --color-bg-primary-hover: #f3f4f6;
 
+    /* 👇 ADDED BORDER TOKENS (LIGHT MODE) */
+    --color-border-main: #e5e7eb;
+    /* Border for prominent edges, cards, inputs */
+    --color-border-sub: #f3f4f6;
+    /* Soft subtle border for structural dividers */
+
     /* Text Sizing Hierarchy - Light Environments */
     --color-text-main: #000000;
     --color-text-sub: #374151;
@@ -34,6 +40,12 @@
     --color-bg-primary: #121212;
     --color-bg-secondary: #1e1e1e;
     --color-bg-primary-hover: #424242;
+
+    /* 👇 ADDED BORDER TOKENS (DARK MODE) */
+    --color-border-main: #2a2a2a;
+    /* Subtle border for dark panels */
+    --color-border-sub: #1f1f1f;
+    /* Extra soft divider line */
 
     /* Text Sizing Hierarchy - Dark Environments */
     --color-text-main: #ffffff;

@@ -61,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
                 {/* NAVIGATION LINKS LIST CONTENT */}
                 {/* NAVIGATION LINKS LIST CONTENT */}
-                <nav className="flex flex-col gap-3 p-2">
+                <nav className="flex flex-col gap-1 p-2">
                     {menuItems.map((item) => {
                         const isActive = location.pathname === item.path;
                         const Icon = item.icon;

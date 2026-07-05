@@ -4,6 +4,7 @@ import { useAuth } from '../config/ApolloProviderWithAuth';
 import { Login } from '../pages/Login';
 import { Layout } from './Layout/Layout';
 import { Home, MyShops, ProfilePage, ScanPage, ShopDetailDashboard } from '../pages';
+import { InventoryPage } from '~/pages/my-shops/id/Inventory';
 
 const ProtectedRouteGuard = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -28,6 +29,7 @@ export const App = () => {
 
           {/* ADDED: Dynamic unprotected route for individual shop dashboards */}
           <Route path="/my-shops/:id" element={<ShopDetailDashboard />} />
+          <Route path="/my-shops/:shopId/inventory" element={<InventoryPage />} />
 
           {/* Protected routes */}
           <Route element={<ProtectedRouteGuard />}>
