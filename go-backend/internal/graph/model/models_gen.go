@@ -21,22 +21,76 @@ type AuthResponse struct {
 	AccessToken string `json:"accessToken"`
 }
 
+type BusinessHours struct {
+	OpenTime  string   `json:"openTime"`
+	CloseTime string   `json:"closeTime"`
+	Days      []string `json:"days"`
+}
+
+type BusinessHoursInput struct {
+	OpenTime  string   `json:"openTime"`
+	CloseTime string   `json:"closeTime"`
+	Days      []string `json:"days"`
+}
+
+type ContactDetails struct {
+	Phone   *string `json:"phone,omitempty"`
+	Email   *string `json:"email,omitempty"`
+	Address *string `json:"address,omitempty"`
+}
+
+type ContactDetailsInput struct {
+	Phone   *string `json:"phone,omitempty"`
+	Email   *string `json:"email,omitempty"`
+	Address *string `json:"address,omitempty"`
+}
+
+type Coordinates struct {
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
+}
+
+type CoordinatesInput struct {
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
+}
+
 type CreatePostInput struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
 }
 
 type CreateShopInput struct {
-	ShopName    string   `json:"shopName"`
-	Address     string   `json:"address"`
-	Description *string  `json:"description,omitempty"`
-	Photo       *string  `json:"photo,omitempty"`
-	Photos      []string `json:"photos,omitempty"`
+	ShopName       string                `json:"shopName"`
+	Address        string                `json:"address"`
+	Description    *string               `json:"description,omitempty"`
+	BusinessHours  *BusinessHoursInput   `json:"businessHours"`
+	PaymentMethods *PaymentMethodsInput  `json:"paymentMethods"`
+	Delivery       *DeliveryOptionsInput `json:"delivery"`
+	SocialMedia    *SocialMediaInput     `json:"socialMedia"`
+	ContactDetails *ContactDetailsInput  `json:"contactDetails"`
+	Coordinates    *CoordinatesInput     `json:"coordinates"`
+	Photo          *string               `json:"photo,omitempty"`
+	Photos         []string              `json:"photos,omitempty"`
 }
 
 type DecrementStockInput struct {
 	ItemID           string `json:"itemId"`
 	QuantityToRemove int    `json:"quantityToRemove"`
+}
+
+type DeliveryOptions struct {
+	Available bool     `json:"available"`
+	Radius    *float64 `json:"radius,omitempty"`
+	Fee       *float64 `json:"fee,omitempty"`
+	MinOrder  *float64 `json:"minOrder,omitempty"`
+}
+
+type DeliveryOptionsInput struct {
+	Available bool     `json:"available"`
+	Radius    *float64 `json:"radius,omitempty"`
+	Fee       *float64 `json:"fee,omitempty"`
+	MinOrder  *float64 `json:"minOrder,omitempty"`
 }
 
 type GoogleLoginInput struct {
@@ -68,15 +122,23 @@ type OwnerInventoryItem struct {
 }
 
 type OwnerShop struct {
-	ID          string   `json:"id"`
-	OwnerID     string   `json:"ownerId"`
-	Owner       *User    `json:"owner"`
-	ShopName    string   `json:"shopName"`
-	Address     string   `json:"address"`
-	Description *string  `json:"description,omitempty"`
-	Photo       *string  `json:"photo,omitempty"`
-	Photos      []string `json:"photos"`
-	CreatedAt   string   `json:"createdAt"`
+	ID             string           `json:"id"`
+	OwnerID        string           `json:"ownerId"`
+	Owner          *User            `json:"owner"`
+	ShopName       string           `json:"shopName"`
+	Coordinates    *Coordinates     `json:"coordinates"`
+	Description    *string          `json:"description,omitempty"`
+	BusinessHours  *BusinessHours   `json:"businessHours"`
+	PaymentMethods *PaymentMethods  `json:"paymentMethods"`
+	Delivery       *DeliveryOptions `json:"delivery"`
+	SocialMedia    *SocialMedia     `json:"socialMedia"`
+	Verification   *Verification    `json:"verification"`
+	ContactDetails *ContactDetails  `json:"contactDetails"`
+	Status         *ShopStatus      `json:"status"`
+	Address        string           `json:"address"`
+	Photo          *string          `json:"photo,omitempty"`
+	Photos         []string         `json:"photos"`
+	CreatedAt      string           `json:"createdAt"`
 }
 
 type PaginatedOwnerInventory struct {
@@ -109,6 +171,20 @@ type PaginatedShops struct {
 	HasNextPage bool    `json:"hasNextPage"`
 }
 
+type PaymentMethods struct {
+	Cash    bool `json:"cash"`
+	Gcash   bool `json:"gcash"`
+	Paymaya bool `json:"paymaya"`
+	Card    bool `json:"card"`
+}
+
+type PaymentMethodsInput struct {
+	Cash    bool `json:"cash"`
+	Gcash   bool `json:"gcash"`
+	Paymaya bool `json:"paymaya"`
+	Card    bool `json:"card"`
+}
+
 type Post struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`
@@ -138,14 +214,22 @@ type RefreshResponse struct {
 }
 
 type Shop struct {
-	ID          string        `json:"id"`
-	ShopName    string        `json:"shopName"`
-	Address     string        `json:"address"`
-	Description *string       `json:"description,omitempty"`
-	Photo       *string       `json:"photo,omitempty"`
-	Photos      []string      `json:"photos"`
-	Reviews     []*ShopReview `json:"reviews"`
-	CreatedAt   string        `json:"createdAt"`
+	ID             string           `json:"id"`
+	ShopName       string           `json:"shopName"`
+	Address        string           `json:"address"`
+	Coordinates    *Coordinates     `json:"coordinates"`
+	Description    *string          `json:"description,omitempty"`
+	BusinessHours  *BusinessHours   `json:"businessHours"`
+	PaymentMethods *PaymentMethods  `json:"paymentMethods"`
+	Delivery       *DeliveryOptions `json:"delivery"`
+	SocialMedia    *SocialMedia     `json:"socialMedia"`
+	Verification   *Verification    `json:"verification"`
+	ContactDetails *ContactDetails  `json:"contactDetails"`
+	Status         *ShopStatus      `json:"status"`
+	Photo          *string          `json:"photo,omitempty"`
+	Photos         []string         `json:"photos"`
+	Reviews        []*ShopReview    `json:"reviews"`
+	CreatedAt      string           `json:"createdAt"`
 }
 
 type ShopReview struct {
@@ -155,6 +239,20 @@ type ShopReview struct {
 	Comment   *string  `json:"comment,omitempty"`
 	Photos    []string `json:"photos"`
 	CreatedAt string   `json:"createdAt"`
+}
+
+type ShopStatus struct {
+	IsActive bool `json:"isActive"`
+}
+
+type SocialMedia struct {
+	Facebook  *string `json:"facebook,omitempty"`
+	Instagram *string `json:"instagram,omitempty"`
+}
+
+type SocialMediaInput struct {
+	Facebook  *string `json:"facebook,omitempty"`
+	Instagram *string `json:"instagram,omitempty"`
 }
 
 type UpdateInventoryItemInput struct {
@@ -178,12 +276,18 @@ type UpdatePostInput struct {
 }
 
 type UpdateShopInput struct {
-	ShopID      string   `json:"shopId"`
-	ShopName    string   `json:"shopName"`
-	Address     string   `json:"address"`
-	Description *string  `json:"description,omitempty"`
-	Photo       *string  `json:"photo,omitempty"`
-	Photos      []string `json:"photos,omitempty"`
+	ShopID         string                `json:"shopId"`
+	ShopName       string                `json:"shopName"`
+	Description    *string               `json:"description,omitempty"`
+	BusinessHours  *BusinessHoursInput   `json:"businessHours"`
+	PaymentMethods *PaymentMethodsInput  `json:"paymentMethods"`
+	Delivery       *DeliveryOptionsInput `json:"delivery"`
+	SocialMedia    *SocialMediaInput     `json:"socialMedia"`
+	ContactDetails *ContactDetailsInput  `json:"contactDetails"`
+	Address        string                `json:"address"`
+	Coordinates    *CoordinatesInput     `json:"coordinates"`
+	Photo          *string               `json:"photo,omitempty"`
+	Photos         []string              `json:"photos,omitempty"`
 }
 
 type User struct {
@@ -193,4 +297,10 @@ type User struct {
 	Email        string               `json:"email"`
 	ProfilePhoto string               `json:"profilePhoto"`
 	Shops        *PaginatedOwnerShops `json:"shops"`
+}
+
+type Verification struct {
+	IsVerified     bool    `json:"isVerified"`
+	VerifiedDate   *string `json:"verifiedDate,omitempty"`
+	VerificationID *string `json:"verificationId,omitempty"`
 }

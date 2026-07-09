@@ -7,6 +7,7 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"go-backend/internal/graph/model"
 	"go-backend/internal/middleware"
@@ -23,25 +24,81 @@ func (r *mutationResolver) CreateShop(ctx context.Context, input model.CreateSho
 	// SECURITY GUARD: Enforce valid user identity state from Redis session
 	currentUser := ctx.Value("currentUser").(middleware.CachedUser)
 
+	// 1. PREPARE DEFAULT STRUCTURES FOR NEWLY CREATED SHOPS
+	defaultHours, _ := json.Marshal(map[string]interface{}{
+		"openTime":  "09:00",
+		"closeTime": "18:00",
+		"days":      []string{"Mon", "Tue", "Wed", "Thu", "Fri"},
+	})
+	defaultPayments, _ := json.Marshal(map[string]interface{}{
+		"cash":    true,
+		"gcash":   false,
+		"paymaya": false,
+		"card":    false,
+	})
+	defaultDelivery, _ := json.Marshal(map[string]interface{}{
+		"available": false,
+		"radius":    0.0,
+		"fee":       0.0,
+		"minOrder":  0.0,
+	})
+	defaultSocial, _ := json.Marshal(map[string]interface{}{
+		"facebook":  "",
+		"instagram": "",
+	})
+	defaultContact, _ := json.Marshal(map[string]interface{}{
+		"phone":   "",
+		"email":   "",
+		"address": input.Address,
+	})
+
+	// Also marshal coordinates from frontend input
+	coordinatesJSON, _ := json.Marshal(input.Coordinates)
+
+	// Marshal status and verification system defaults to match your migration rules
+	statusJSON, _ := json.Marshal(map[string]interface{}{"isActive": true})
+	verificationJSON, _ := json.Marshal(map[string]interface{}{"isVerified": false, "verifiedDate": nil, "verificationId": ""})
+
+	finalPhotosSlice := input.Photos
+	if finalPhotosSlice == nil {
+		finalPhotosSlice = []string{}
+	}
+
+	// 2. FIXED QUERY STRING WITH EXACTLY 14 COLUMNS MATCHING 14 VALUE PLACEHOLDERS
 	query := `
-		INSERT INTO shops (shop_name, address, description, photo, photos, owner_id, created_at) 
-		VALUES ($1, $2, $3, $4, $5, $6, NOW()) 
+		INSERT INTO shops (
+			shop_name, address, description, photo, photos, owner_id, created_at,
+			business_hours, payment_methods, delivery, social_media, contact_details,
+			coordinates, status, verification
+		) 
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10, $11, $12, $13, $14) 
 		RETURNING id, created_at
 	`
 	var insertedID string
 	var createdAt time.Time
 
-	// pgx natively supports passing []string directly for PostgreSQL text[] columns
+	// Execute database transaction with proper argument bindings
 	err := r.Resolver.DB.QueryRow(ctx, query,
-		input.ShopName,
-		input.Address,
-		input.Description,
-		input.Photo,
-		input.Photos,
-		currentUser.ID,
+		input.ShopName,    // $1
+		input.Address,     // $2
+		input.Description, // $3
+		input.Photo,       // $4
+		finalPhotosSlice,  // $5
+		currentUser.ID,    // $6
+		defaultHours,      // $7
+		defaultPayments,   // $8
+		defaultDelivery,   // $9
+		defaultSocial,     // $10
+		defaultContact,    // $11
+		coordinatesJSON,   // $12
+		statusJSON,        // $13
+		verificationJSON,  // $14
 	).Scan(&insertedID, &createdAt)
 
 	if err != nil {
+		// 🔴 LOGGING INJECTED: Look at your terminal stdout to see the database complaint!
+		log.Printf("🔴 DATABASE TRANSACTION FAILED IN CREATESHOP: %v", err)
+
 		graphql.AddError(ctx, &gqlerror.Error{
 			Message: "internal server error: failed to create shop entry",
 			Extensions: map[string]interface{}{
@@ -51,12 +108,7 @@ func (r *mutationResolver) CreateShop(ctx context.Context, input model.CreateSho
 		return nil, nil
 	}
 
-	// Unpack strings back out for the model layout definition safely
-	var returnedPhotos []string
-	for _, p := range input.Photos {
-		returnedPhotos = append(returnedPhotos, p)
-	}
-
+	// 3. RETURN ENTIRE OBJECT MATCHING THE OWNER_SHOP STRUCT REQUIREMENTS
 	return &model.OwnerShop{
 		ID:          insertedID,
 		OwnerID:     currentUser.ID,
@@ -64,8 +116,36 @@ func (r *mutationResolver) CreateShop(ctx context.Context, input model.CreateSho
 		Address:     input.Address,
 		Description: input.Description,
 		Photo:       input.Photo,
-		Photos:      returnedPhotos,
+		Photos:      finalPhotosSlice,
 		CreatedAt:   createdAt.Format(time.RFC3339),
+		Coordinates: &model.Coordinates{
+			Lat: input.Coordinates.Lat,
+			Lng: input.Coordinates.Lng,
+		},
+		BusinessHours: &model.BusinessHours{
+			OpenTime:  "09:00",
+			CloseTime: "18:00",
+			Days:      []string{"Mon", "Tue", "Wed", "Thu", "Fri"},
+		},
+		PaymentMethods: &model.PaymentMethods{
+			Cash:    true,
+			Gcash:   false,
+			Paymaya: false,
+			Card:    false,
+		},
+		Delivery: &model.DeliveryOptions{
+			Available: false,
+		},
+		SocialMedia: &model.SocialMedia{},
+		ContactDetails: &model.ContactDetails{
+			Address: &input.Address,
+		},
+		Status: &model.ShopStatus{
+			IsActive: true,
+		},
+		Verification: &model.Verification{
+			IsVerified: false,
+		},
 	}, nil
 }
 
@@ -76,8 +156,11 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 
 	// SECURITY GUARD 2: Fetch owner to verify credentials
 	var dbOwnerID string
-	checkQuery := "SELECT owner_id FROM shops WHERE id = $1 LIMIT 1"
-	err := r.Resolver.DB.QueryRow(ctx, checkQuery, input.ShopID).Scan(&dbOwnerID)
+	var verificationJSON []byte
+	var statusJSON []byte
+
+	checkQuery := "SELECT owner_id, status, verification FROM shops WHERE id = $1 LIMIT 1"
+	err := r.Resolver.DB.QueryRow(ctx, checkQuery, input.ShopID).Scan(&dbOwnerID, &statusJSON, &verificationJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			graphql.AddError(ctx, &gqlerror.Error{
@@ -98,18 +181,57 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 		return nil, nil
 	}
 
+	// 1. SERIALIZE SUBMITTED GRAPHQL INPUTS INTO BYTES FOR POSTGRES JSONB
+	hoursJSON, _ := json.Marshal(input.BusinessHours)
+	paymentsJSON, _ := json.Marshal(input.PaymentMethods)
+	deliveryJSON, _ := json.Marshal(input.Delivery)
+	socialJSON, _ := json.Marshal(input.SocialMedia)
+	contactJSON, _ := json.Marshal(input.ContactDetails)
+
+	// Unmarshal existing system properties so we can output them correctly at the end
+	var currentStatus model.ShopStatus
+	var currentVerification model.Verification
+	_ = json.Unmarshal(statusJSON, &currentStatus)
+	_ = json.Unmarshal(verificationJSON, &currentVerification)
+
+	finalPhotosSlice := input.Photos
+	if finalPhotosSlice == nil {
+		finalPhotosSlice = []string{}
+	}
+
+	// 2. EXPANDED SQL UPDATE TARGET CONFIGURATION
 	updateQuery := `
 		UPDATE shops 
-		SET shop_name = $1, address = $2, description = $3, photo = $4, photos = $5 
-		WHERE id = $6 
+		SET shop_name = $1, 
+			address = $2, 
+			description = $3, 
+			photo = $4, 
+			photos = $5,
+			business_hours = $6, 
+			payment_methods = $7, 
+			delivery = $8, 
+			social_media = $9, 
+			contact_details = $10
+		WHERE id = $11 
 		RETURNING id, created_at
 	`
 	var id string
 	var createdAt time.Time
 
 	err = r.Resolver.DB.QueryRow(ctx, updateQuery,
-		input.ShopName, input.Address, input.Description, input.Photo, input.Photos, input.ShopID,
+		input.ShopName,
+		input.Address,
+		input.Description,
+		input.Photo,
+		input.Photos,
+		hoursJSON,
+		paymentsJSON,
+		deliveryJSON,
+		socialJSON,
+		contactJSON,
+		input.ShopID,
 	).Scan(&id, &createdAt)
+
 	if err != nil {
 		graphql.AddError(ctx, &gqlerror.Error{
 			Message:    "internal server error: failed saving shop updates",
@@ -118,6 +240,7 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 		return nil, nil
 	}
 
+	// 3. RETURN FULLY COMPLETED STRUCT WITH MUTATED VALUES MAPPED OVER
 	return &model.OwnerShop{
 		ID:          id,
 		OwnerID:     currentUser.ID,
@@ -125,8 +248,34 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 		Address:     input.Address,
 		Description: input.Description,
 		Photo:       input.Photo,
-		Photos:      input.Photos,
+		Photos:      finalPhotosSlice,
 		CreatedAt:   createdAt.Format(time.RFC3339),
+		BusinessHours: &model.BusinessHours{
+			OpenTime:  input.BusinessHours.OpenTime,
+			CloseTime: input.BusinessHours.CloseTime,
+			Days:      input.BusinessHours.Days,
+		},
+		PaymentMethods: &model.PaymentMethods{
+			Cash:    input.PaymentMethods.Cash,
+			Gcash:   input.PaymentMethods.Gcash,
+			Paymaya: input.PaymentMethods.Paymaya,
+			Card:    input.PaymentMethods.Card,
+		},
+		Delivery: &model.DeliveryOptions{
+			Available: input.Delivery.Available,
+			Radius:    input.Delivery.Radius,
+			Fee:       input.Delivery.Fee,
+			MinOrder:  input.Delivery.MinOrder,
+		},
+		SocialMedia: &model.SocialMedia{
+			Facebook:  input.SocialMedia.Facebook,
+			Instagram: input.SocialMedia.Instagram,
+		},
+		ContactDetails: &model.ContactDetails{
+			Phone:   input.ContactDetails.Phone,
+			Email:   input.ContactDetails.Email,
+			Address: input.ContactDetails.Address,
+		},
 	}, nil
 }
 
@@ -254,6 +403,7 @@ func (r *mutationResolver) AddInventoryItem(ctx context.Context, input model.Add
 	}, nil
 }
 
+// UpdateInventoryItem is the resolver for the updateInventoryItem field.
 func (r *mutationResolver) UpdateInventoryItem(ctx context.Context, input model.UpdateInventoryItemInput) (*model.OwnerInventoryItem, error) {
 	currentUser := ctx.Value("currentUser").(middleware.CachedUser)
 

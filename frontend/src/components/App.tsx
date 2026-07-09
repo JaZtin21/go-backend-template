@@ -25,14 +25,14 @@ export const App = () => {
         {/* Nest your view paths inside the persistent Layout engine configuration */}
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/my-shops" element={<MyShops />} />
 
-          {/* ADDED: Dynamic unprotected route for individual shop dashboards */}
-          <Route path="/my-shops/:id" element={<ShopDetailDashboard />} />
-          <Route path="/my-shops/:shopId/inventory" element={<InventoryPage />} />
 
           {/* Protected routes */}
           <Route element={<ProtectedRouteGuard />}>
+            <Route path="/my-shops" element={<MyShops />} />
+            {/* ADDED: Dynamic unprotected route for individual shop dashboards */}
+            <Route path="/my-shops/:id" element={<ShopDetailDashboard />} />
+            <Route path="/my-shops/:shopId/inventory" element={<InventoryPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/scan" element={<ScanPage />} />
           </Route>

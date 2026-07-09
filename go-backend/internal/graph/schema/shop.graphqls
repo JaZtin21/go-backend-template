@@ -4,12 +4,64 @@ extend type User {
   shops(limit: Int!, offset: Int!): PaginatedOwnerShops!
 }
 
+type BusinessHours {
+  openTime: String!
+  closeTime: String!
+  days: [String!]!
+}
+
+type PaymentMethods {
+  cash: Boolean!
+  gcash: Boolean!
+  paymaya: Boolean!
+  card: Boolean!
+}
+
+type DeliveryOptions {
+  available: Boolean!
+  radius: Float
+  fee: Float
+  minOrder: Float
+}
+
+type SocialMedia {
+  facebook: String
+  instagram: String
+}
+
+type ContactDetails {
+  phone: String
+  email: String
+  address: String
+}
+type Verification {
+  isVerified: Boolean!
+  verifiedDate: String
+  verificationId: String
+}
+
+type ShopStatus{
+   isActive: Boolean!
+}
+type Coordinates {
+  lat: Float!
+  lng: Float!
+}
+
 # The Public Shop profile that anyone can view
 type Shop {
   id: ID!
   shopName: String!
-  address: String!     
-  description: String    
+  address: String!
+  coordinates: Coordinates!     
+  description: String
+  businessHours: BusinessHours!
+  paymentMethods: PaymentMethods!
+  delivery: DeliveryOptions!
+  socialMedia: SocialMedia!
+  verification: Verification!
+  contactDetails: ContactDetails!
+  status: ShopStatus!
   photo: String          
   photos: [String!]!     
   reviews: [ShopReview!]! 
@@ -22,8 +74,16 @@ type OwnerShop {
   ownerId: String!   
   owner: User!       
   shopName: String!
-  address: String!     
-  description: String    
+  coordinates: Coordinates!
+  description: String
+  businessHours: BusinessHours!
+  paymentMethods: PaymentMethods!
+  delivery: DeliveryOptions!
+  socialMedia: SocialMedia!
+  verification: Verification!
+  contactDetails: ContactDetails!
+  status: ShopStatus!
+  address: String!       
   photo: String          
   photos: [String!]!     
   createdAt: String!
@@ -100,9 +160,52 @@ input CreateShopInput {
   shopName: String!
   address: String!     
   description: String    
+  businessHours: BusinessHoursInput!      #  FIXED
+  paymentMethods: PaymentMethodsInput!    #  FIXED
+  delivery: DeliveryOptionsInput!         #  FIXED
+  socialMedia: SocialMediaInput!          #  FIXED
+  contactDetails: ContactDetailsInput!    #  FIXED
+  coordinates: CoordinatesInput!
   photo: String          
   photos: [String!]      
 }
+
+input BusinessHoursInput {
+  openTime: String!
+  closeTime: String!
+  days: [String!]!
+}
+
+input CoordinatesInput {
+  lat: Float!
+  lng: Float!
+}
+
+input PaymentMethodsInput {
+  cash: Boolean!
+  gcash: Boolean!
+  paymaya: Boolean!
+  card: Boolean!
+}
+
+input DeliveryOptionsInput {
+  available: Boolean!
+  radius: Float
+  fee: Float
+  minOrder: Float
+}
+
+input SocialMediaInput {
+  facebook: String
+  instagram: String
+}
+
+input ContactDetailsInput {
+  phone: String
+  email: String
+  address: String
+}
+
 
 input AddInventoryItemInput {
   shopId: ID!
@@ -131,8 +234,14 @@ input DecrementStockInput {
 input UpdateShopInput {
   shopId: ID!
   shopName: String!
-  address: String!
   description: String
+  businessHours: BusinessHoursInput!      #  FIXED
+  paymentMethods: PaymentMethodsInput!    #  FIXED
+  delivery: DeliveryOptionsInput!         #  FIXED
+  socialMedia: SocialMediaInput!          #  FIXED
+  contactDetails: ContactDetailsInput!    #  FIXED
+  address: String!
+  coordinates: CoordinatesInput!
   photo: String
   photos: [String!]
 }
