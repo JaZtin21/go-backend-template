@@ -24,47 +24,25 @@ func (r *mutationResolver) CreateShop(ctx context.Context, input model.CreateSho
 	// SECURITY GUARD: Enforce valid user identity state from Redis session
 	currentUser := ctx.Value("currentUser").(middleware.CachedUser)
 
-	// 1. PREPARE DEFAULT STRUCTURES FOR NEWLY CREATED SHOPS
-	defaultHours, _ := json.Marshal(map[string]interface{}{
-		"openTime":  "09:00",
-		"closeTime": "18:00",
-		"days":      []string{"Mon", "Tue", "Wed", "Thu", "Fri"},
-	})
-	defaultPayments, _ := json.Marshal(map[string]interface{}{
-		"cash":    true,
-		"gcash":   false,
-		"paymaya": false,
-		"card":    false,
-	})
-	defaultDelivery, _ := json.Marshal(map[string]interface{}{
-		"available": false,
-		"radius":    0.0,
-		"fee":       0.0,
-		"minOrder":  0.0,
-	})
-	defaultSocial, _ := json.Marshal(map[string]interface{}{
-		"facebook":  "",
-		"instagram": "",
-	})
-	defaultContact, _ := json.Marshal(map[string]interface{}{
-		"phone":   "",
-		"email":   "",
-		"address": input.Address,
-	})
-
-	// Also marshal coordinates from frontend input
+	// 1. MARSHAL THE ACTUAL DYNAMIC USER DATA FROM THE FRONTEND INPUT PAYLOAD
+	hoursJSON, _ := json.Marshal(input.BusinessHours)
+	paymentsJSON, _ := json.Marshal(input.PaymentMethods)
+	deliveryJSON, _ := json.Marshal(input.Delivery)
+	socialJSON, _ := json.Marshal(input.SocialMedia)
+	contactJSON, _ := json.Marshal(input.ContactDetails)
 	coordinatesJSON, _ := json.Marshal(input.Coordinates)
 
-	// Marshal status and verification system defaults to match your migration rules
-	statusJSON, _ := json.Marshal(map[string]interface{}{"isActive": true})
-	verificationJSON, _ := json.Marshal(map[string]interface{}{"isVerified": false, "verifiedDate": nil, "verificationId": ""})
+	// Admin fields stay as defaults since frontend doesn't manage them directly
+	statusJSON, _ := json.Marshal(map[string]any{"isActive": true})
+	verificationJSON, _ := json.Marshal(map[string]any{"isVerified": false, "verifiedDate": nil, "verificationId": ""})
 
+	// Safely guarantee that an empty array block gets passed to PostgreSQL instead of a raw SQL NULL
 	finalPhotosSlice := input.Photos
 	if finalPhotosSlice == nil {
 		finalPhotosSlice = []string{}
 	}
 
-	// 2. FIXED QUERY STRING WITH EXACTLY 14 COLUMNS MATCHING 14 VALUE PLACEHOLDERS
+	// 2. QUERY STRING WITH EXACTLY 14 COLUMNS MATCHING 14 VALUE PLACEHOLDERS
 	query := `
 		INSERT INTO shops (
 			shop_name, address, description, photo, photos, owner_id, created_at,
@@ -85,30 +63,28 @@ func (r *mutationResolver) CreateShop(ctx context.Context, input model.CreateSho
 		input.Photo,       // $4
 		finalPhotosSlice,  // $5
 		currentUser.ID,    // $6
-		defaultHours,      // $7
-		defaultPayments,   // $8
-		defaultDelivery,   // $9
-		defaultSocial,     // $10
-		defaultContact,    // $11
-		coordinatesJSON,   // $12
+		hoursJSON,         // $7  <-- FIXED: Real front-end business hours
+		paymentsJSON,      // $8  <-- FIXED: Real front-end payment methods
+		deliveryJSON,      // $9  <-- FIXED: Real front-end delivery options
+		socialJSON,        // $10 <-- FIXED: Real front-end social media links
+		contactJSON,       // $11 <-- FIXED: Real front-end contact details
+		coordinatesJSON,   // $12 <-- FIXED: Real front-end coordinates
 		statusJSON,        // $13
 		verificationJSON,  // $14
 	).Scan(&insertedID, &createdAt)
 
 	if err != nil {
-		// 🔴 LOGGING INJECTED: Look at your terminal stdout to see the database complaint!
 		log.Printf("🔴 DATABASE TRANSACTION FAILED IN CREATESHOP: %v", err)
-
 		graphql.AddError(ctx, &gqlerror.Error{
 			Message: "internal server error: failed to create shop entry",
-			Extensions: map[string]interface{}{
+			Extensions: map[string]any{
 				"code": "INTERNAL_SERVER_ERROR",
 			},
 		})
 		return nil, nil
 	}
 
-	// 3. RETURN ENTIRE OBJECT MATCHING THE OWNER_SHOP STRUCT REQUIREMENTS
+	// 3. RETURN ENTIRE OBJECT MATCHING USER SUBMISSIONS
 	return &model.OwnerShop{
 		ID:          insertedID,
 		OwnerID:     currentUser.ID,
@@ -123,22 +99,30 @@ func (r *mutationResolver) CreateShop(ctx context.Context, input model.CreateSho
 			Lng: input.Coordinates.Lng,
 		},
 		BusinessHours: &model.BusinessHours{
-			OpenTime:  "09:00",
-			CloseTime: "18:00",
-			Days:      []string{"Mon", "Tue", "Wed", "Thu", "Fri"},
+			OpenTime:  input.BusinessHours.OpenTime,
+			CloseTime: input.BusinessHours.CloseTime,
+			Days:      input.BusinessHours.Days,
 		},
 		PaymentMethods: &model.PaymentMethods{
-			Cash:    true,
-			Gcash:   false,
-			Paymaya: false,
-			Card:    false,
+			Cash:    input.PaymentMethods.Cash,
+			Gcash:   input.PaymentMethods.Gcash,
+			Paymaya: input.PaymentMethods.Paymaya,
+			Card:    input.PaymentMethods.Card,
 		},
 		Delivery: &model.DeliveryOptions{
-			Available: false,
+			Available: input.Delivery.Available,
+			Radius:    input.Delivery.Radius,
+			Fee:       input.Delivery.Fee,
+			MinOrder:  input.Delivery.MinOrder,
 		},
-		SocialMedia: &model.SocialMedia{},
+		SocialMedia: &model.SocialMedia{
+			Facebook:  input.SocialMedia.Facebook,
+			Instagram: input.SocialMedia.Instagram,
+		},
 		ContactDetails: &model.ContactDetails{
-			Address: &input.Address,
+			Phone:   input.ContactDetails.Phone,
+			Email:   input.ContactDetails.Email,
+			Address: input.ContactDetails.Address,
 		},
 		Status: &model.ShopStatus{
 			IsActive: true,
@@ -187,6 +171,7 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 	deliveryJSON, _ := json.Marshal(input.Delivery)
 	socialJSON, _ := json.Marshal(input.SocialMedia)
 	contactJSON, _ := json.Marshal(input.ContactDetails)
+	coordinatesJSON, _ := json.Marshal(input.Coordinates) // 🟢 Added
 
 	// Unmarshal existing system properties so we can output them correctly at the end
 	var currentStatus model.ShopStatus
@@ -199,7 +184,7 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 		finalPhotosSlice = []string{}
 	}
 
-	// 2. EXPANDED SQL UPDATE TARGET CONFIGURATION
+	// 2. EXPANDED SQL UPDATE TARGET CONFIGURATION (Included coordinates column)
 	updateQuery := `
 		UPDATE shops 
 		SET shop_name = $1, 
@@ -211,8 +196,9 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 			payment_methods = $7, 
 			delivery = $8, 
 			social_media = $9, 
-			contact_details = $10
-		WHERE id = $11 
+			contact_details = $10,
+			coordinates = $11
+		WHERE id = $12
 		RETURNING id, created_at
 	`
 	var id string
@@ -223,16 +209,18 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 		input.Address,
 		input.Description,
 		input.Photo,
-		input.Photos,
+		input.Photos, // Note: your schema array parameters map fine depending on your go driver setup
 		hoursJSON,
 		paymentsJSON,
 		deliveryJSON,
 		socialJSON,
 		contactJSON,
-		input.ShopID,
+		coordinatesJSON, // 🟢 Added parameter ($11)
+		input.ShopID,    // 🟢 Moved to parameter ($12)
 	).Scan(&id, &createdAt)
 
 	if err != nil {
+		log.Printf("🔴 DATABASE UPDATE FAILED IN UPDATESHOP: %v", err)
 		graphql.AddError(ctx, &gqlerror.Error{
 			Message:    "internal server error: failed saving shop updates",
 			Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
@@ -250,6 +238,10 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 		Photo:       input.Photo,
 		Photos:      finalPhotosSlice,
 		CreatedAt:   createdAt.Format(time.RFC3339),
+		Coordinates: &model.Coordinates{ // 🟢 Added: Prevents the schema null value validation exception!
+			Lat: input.Coordinates.Lat,
+			Lng: input.Coordinates.Lng,
+		},
 		BusinessHours: &model.BusinessHours{
 			OpenTime:  input.BusinessHours.OpenTime,
 			CloseTime: input.BusinessHours.CloseTime,
@@ -276,6 +268,8 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 			Email:   input.ContactDetails.Email,
 			Address: input.ContactDetails.Address,
 		},
+		Status:       &currentStatus,       // 🟢 Added back to ensure full data return
+		Verification: &currentVerification, // 🟢 Added back to ensure full data return
 	}, nil
 }
 
@@ -665,9 +659,10 @@ func (r *queryResolver) GetMyShops(ctx context.Context, limit int, offset int) (
 		return nil, nil
 	}
 
-	// 2. Fetch the paginated subset from PostgreSQL
+	// 2. Fetch the paginated subset from PostgreSQL (Matching your exact table schema columns)
 	selectQuery := `
-		SELECT id, shop_name, address, description, photo, photos, owner_id, created_at 
+		SELECT id, shop_name, address, description, photo, photos, owner_id, created_at, 
+		       verification, contact_details, status, coordinates, business_hours, payment_methods, delivery, social_media
 		FROM shops 
 		WHERE owner_id = $1
 		ORDER BY created_at DESC 
@@ -675,6 +670,7 @@ func (r *queryResolver) GetMyShops(ctx context.Context, limit int, offset int) (
 	`
 	rows, err := r.Resolver.DB.Query(ctx, selectQuery, currentUser.ID, limit, offset)
 	if err != nil {
+		log.Printf("🔴 Error getting shops: %v", err)
 		graphql.AddError(ctx, &gqlerror.Error{
 			Message: "internal server error: collection retrieval failure",
 			Extensions: map[string]interface{}{
@@ -690,11 +686,25 @@ func (r *queryResolver) GetMyShops(ctx context.Context, limit int, offset int) (
 		var shop model.OwnerShop
 		var createdAt time.Time
 
+		// Allocate temporary raw byte buffers to hold JSONB structures from PostgreSQL columns
+		var verificationBytes []byte
+		var contactBytes []byte
+		var statusBytes []byte
+		var coordinatesBytes []byte
+		var hoursBytes []byte
+		var paymentsBytes []byte
+		var deliveryBytes []byte
+		var socialBytes []byte
+
+		// FIXED: Scan all 16 incoming column positions perfectly 1-to-1
 		err := rows.Scan(
 			&shop.ID, &shop.ShopName, &shop.Address, &shop.Description,
 			&shop.Photo, &shop.Photos, &shop.OwnerID, &createdAt,
+			&verificationBytes, &contactBytes, &statusBytes, &coordinatesBytes,
+			&hoursBytes, &paymentsBytes, &deliveryBytes, &socialBytes,
 		)
 		if err != nil {
+			log.Printf("🔴 Rows scan decoding anomaly details: %v", err)
 			graphql.AddError(ctx, &gqlerror.Error{
 				Message: "internal server error: data decoding anomaly",
 				Extensions: map[string]interface{}{
@@ -703,6 +713,27 @@ func (r *queryResolver) GetMyShops(ctx context.Context, limit int, offset int) (
 			})
 			return nil, nil
 		}
+
+		// Initialize structural payload containers to prevent nil pointer encoding memory exceptions
+		shop.Verification = &model.Verification{}
+		shop.ContactDetails = &model.ContactDetails{}
+		shop.Status = &model.ShopStatus{}
+		shop.Coordinates = &model.Coordinates{}
+		shop.BusinessHours = &model.BusinessHours{}
+		shop.PaymentMethods = &model.PaymentMethods{}
+		shop.Delivery = &model.DeliveryOptions{}
+		shop.SocialMedia = &model.SocialMedia{}
+
+		// Safely decode JSON buffers straight back into your model layouts
+		_ = json.Unmarshal(verificationBytes, shop.Verification)
+		_ = json.Unmarshal(contactBytes, shop.ContactDetails)
+		_ = json.Unmarshal(statusBytes, shop.Status)
+		_ = json.Unmarshal(coordinatesBytes, shop.Coordinates)
+		_ = json.Unmarshal(hoursBytes, shop.BusinessHours)
+		_ = json.Unmarshal(paymentsBytes, shop.PaymentMethods)
+		_ = json.Unmarshal(deliveryBytes, shop.Delivery)
+		_ = json.Unmarshal(socialBytes, shop.SocialMedia)
+
 		shop.CreatedAt = createdAt.Format(time.RFC3339)
 		shops = append(shops, &shop)
 	}
@@ -842,7 +873,8 @@ func (r *queryResolver) SearchShop(ctx context.Context, query string, limit int,
 
 	// 2. Fetch the paginated public subset (No ownerId column requested)
 	selectQuery := `
-		SELECT id, shop_name, address, description, photo, photos, created_at 
+		SELECT id, shop_name, address, description, photo, photos, created_at, 
+		       verification, contact_details, status, coordinates, business_hours, payment_methods, delivery, social_media
 		FROM shops 
 		WHERE shop_name ILIKE $1 OR address ILIKE $1
 		ORDER BY shop_name ASC 
@@ -863,14 +895,50 @@ func (r *queryResolver) SearchShop(ctx context.Context, query string, limit int,
 		var shop model.Shop
 		var createdAt time.Time
 
-		err := rows.Scan(&shop.ID, &shop.ShopName, &shop.Address, &shop.Description, &shop.Photo, &shop.Photos, &createdAt)
+		// Allocate temporary raw byte buffers to hold JSONB structures from PostgreSQL columns
+		var verificationBytes []byte
+		var contactBytes []byte
+		var statusBytes []byte
+		var coordinatesBytes []byte
+		var hoursBytes []byte
+		var paymentsBytes []byte
+		var deliveryBytes []byte
+		var socialBytes []byte
+
+		// FIXED: Scan all 15 columns perfectly 1-to-1 matching position order
+		err := rows.Scan(
+			&shop.ID, &shop.ShopName, &shop.Address, &shop.Description, &shop.Photo, &shop.Photos, &createdAt,
+			&verificationBytes, &contactBytes, &statusBytes, &coordinatesBytes,
+			&hoursBytes, &paymentsBytes, &deliveryBytes, &socialBytes,
+		)
 		if err != nil {
+			log.Printf("🔴 Public search rows scan decoding anomaly details: %v", err)
 			graphql.AddError(ctx, &gqlerror.Error{
 				Message:    "internal server error: data rendering exception",
 				Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
 			})
 			return nil, nil
 		}
+
+		// Initialize structural payload containers to prevent nil pointer encoding memory exceptions
+		shop.Verification = &model.Verification{}
+		shop.ContactDetails = &model.ContactDetails{}
+		shop.Status = &model.ShopStatus{}
+		shop.Coordinates = &model.Coordinates{}
+		shop.BusinessHours = &model.BusinessHours{}
+		shop.PaymentMethods = &model.PaymentMethods{}
+		shop.Delivery = &model.DeliveryOptions{}
+		shop.SocialMedia = &model.SocialMedia{}
+
+		// Safely decode JSON buffers straight back into your model layouts
+		_ = json.Unmarshal(verificationBytes, shop.Verification)
+		_ = json.Unmarshal(contactBytes, shop.ContactDetails)
+		_ = json.Unmarshal(statusBytes, shop.Status)
+		_ = json.Unmarshal(coordinatesBytes, shop.Coordinates)
+		_ = json.Unmarshal(hoursBytes, shop.BusinessHours)
+		_ = json.Unmarshal(paymentsBytes, shop.PaymentMethods)
+		_ = json.Unmarshal(deliveryBytes, shop.Delivery)
+		_ = json.Unmarshal(socialBytes, shop.SocialMedia)
 
 		// Initialize reviews as empty slice to avoid frontend nil panics
 		shop.Reviews = []*model.ShopReview{}

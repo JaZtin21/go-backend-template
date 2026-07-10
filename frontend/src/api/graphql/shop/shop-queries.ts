@@ -206,6 +206,32 @@ export const GET_MY_SHOPS_QUERY = gql`
         photo
         photos
         createdAt
+        businessHours {
+          openTime
+          closeTime
+          days
+        }
+        paymentMethods {
+          cash
+          gcash
+          paymaya
+          card
+        }
+        delivery {
+          available
+          radius
+          fee
+          minOrder
+        }
+        socialMedia {
+          facebook
+          instagram
+        }
+        contactDetails {
+          phone
+          email
+          address
+        }
       }
     }
   }

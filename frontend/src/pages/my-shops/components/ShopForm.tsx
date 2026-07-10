@@ -3,15 +3,10 @@ import { useState, useRef, type ChangeEvent } from 'react';
 //import { LocationPicker } from './LocationPicker';
 import { useMutation } from '@apollo/client/react';
 import { CREATE_SHOP_MUTATION, UPDATE_SHOP_MUTATION } from '~/api/graphql';
-
-interface ShopFormProps {
-    shop?: any;
-    onSaveShop: any;
-    onCancel: () => void;
-    isLoading: boolean;
-}
-
-interface Shop { }
+import type { Shop } from "~/types/shop";
+import { useDispatch } from 'react-redux';
+import { addShop, updateShop } from '~/store/myShopsSlice';
+import { setAddShopModalOpen } from '~/store/uiSlice';
 
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400';
 
@@ -28,21 +23,53 @@ const ImageIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
-export const ShopForm = () => {
+
+export const ShopForm = ({ data }: { data?: Shop }) => {
+
+    console.log('is this loggn');
+    const isEdit: boolean = !!data && Object.keys(data).length > 0;
+    const shop: Shop | undefined = data
+
+    console.log(isEdit, shop);
+
+    const dispatch = useDispatch();
 
 
-    const shop: any = {};
-    const onSaveShop = () => { }
+    const [createShop, { loading: createLoading }] = useMutation(CREATE_SHOP_MUTATION, {
+        onCompleted: (res: any) => {
+            console.log('res this shop', res);
+            dispatch(addShop(res.createShop));
+            dispatch(setAddShopModalOpen(false));
+        },
+        onError: (err) => {
+            console.error("Create Shop Mutation Error:", err);
+        }
+    });
+    // 1. Initialize your Apollo Client Mutation hook with an explicit completion listener
+    const [updateShopMutation, { loading: isMutationLoading }] = useMutation(UPDATE_SHOP_MUTATION, {
+        onCompleted: (res: any) => {
+            if (res?.updateShop) {
+                //  DISPATCH ACTION: Updates the shop item where ID matches instantly inside the Redux array
+                dispatch(updateShop(res.updateShop));
+                dispatch(setAddShopModalOpen(false));
+            }
+        },
+        onError: (err) => {
+            console.error("GraphQL Save Failure:", err);
+            alert("Failed to sync structural edits to database.");
+        }
+    });
+
     const onCancel = () => { }
-    const isLoading = false
+    const isLoading = createLoading || isMutationLoading
 
     const [formData, setFormData] = useState({
-        name: shop?.name || '',
+        name: shop?.shopName || '',
         description: shop?.description || '',
         phone: shop?.contactDetails?.phone || '',
         email: shop?.contactDetails?.email || '',
         address: shop?.contactDetails?.address || '',
-        coverPhotoUrl: shop?.coverPhoto || DEFAULT_IMAGE,
+        coverPhotoUrl: shop?.photo || DEFAULT_IMAGE,
         coordinates: shop?.coordinates || { lat: 14.5995, lng: 120.9842 },
         openTime: shop?.businessHours?.openTime || '08:00',
         closeTime: shop?.businessHours?.closeTime || '20:00',
@@ -50,11 +77,10 @@ export const ShopForm = () => {
     });
 
     // Cover photo upload state - track existing and new separately like EditPostModal
-    const [existingCoverPhoto, setExistingCoverPhoto] = useState<string>(shop?.coverPhoto || '');
+    const [existingCoverPhoto, setExistingCoverPhoto] = useState<string>(shop?.photo || '');
     const [newCoverFile, setNewCoverFile] = useState<File | null>(null);
     const [newCoverPreview, setNewCoverPreview] = useState<string>('');
-    const [createShop, { loading: createLoading }] = useMutation(CREATE_SHOP_MUTATION);
-    const [updateShop, { loading: updateLoading }] = useMutation(UPDATE_SHOP_MUTATION);
+
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -111,13 +137,20 @@ export const ShopForm = () => {
             return;
         }
 
-        if (!formData.address) {
+        {
+            /*
+    if (!formData.address) {
             alert('Please select a location');
-            //return;
+            return;
         }
+            */
+        }
+
 
         // Build complete Shop object with all required fields for API
         const shopData: Shop = {
+            photo: existingCoverPhoto,
+            photos: [],
             shopName: formData.name,
             description: formData.description,
             address: '123',
@@ -125,8 +158,6 @@ export const ShopForm = () => {
                 lat: 123,
                 lng: 123
             },
-            //coverPhoto: formData.coverPhotoUrl || DEFAULT_IMAGE,
-            //otherPhotos: shop?.otherPhotos || [],
             contactDetails: {
                 phone: formData.phone,
                 email: formData.email,
@@ -156,17 +187,29 @@ export const ShopForm = () => {
             },
         };
 
-        createShop({
-            variables: {
-                input: shopData
-            }
-        });
+        if (isEdit) {
+            updateShopMutation({
+                variables: {
+                    input: {
+                        ...shopData,
+                        shopId: shop?.id // 🟢 FIXED: Maps the identifier to the correct backend expected key name
+                    }
+                }
+            });
+        } else {
+            createShop({
+                variables: {
+                    input: shopData
+                }
+            });
+        }
+
         // Pass both existing URL and new File - upload happens via GraphQL mutation
         // Like EditPostModal: passes existing photos + new files
     };
 
     return (
-        <div className="w-full md:max-h-[80vh] ">
+        <div className="w-full max-h-[80vh] md:max-h-[80vh] ">
             <div className="bg-bg-secondary rounded-lg p-6 shadow-lg">
                 {
                     /*
@@ -367,29 +410,30 @@ export const ShopForm = () => {
                         </p>
                     </div>
 
-                    <div className="flex gap-4">
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="px-6 py-2 bg-emerald-500 text-text-main rounded-lg hover:bg- disabled:bg-zinc-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                        >
-                            {isLoading ? (
-                                <>
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                    <span>{shop ? 'Updating...' : 'Adding...'}</span>
-                                </>
-                            ) : (
-                                <span>{shop ? 'Update Shop' : 'Add Shop'}</span>
-                            )}
-                        </button>
+                    <div className="flex gap-4 justify-end">
                         <button
                             type="button"
                             onClick={onCancel}
                             disabled={isLoading}
-                            className="px-6 py-2 bg-zinc-200 dark:bg-zinc-700 text-text-main rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-6 py-2 cursor-pointer bg-zinc-200 dark:bg-zinc-700 text-text-main rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             Cancel
                         </button>
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="px-6 py-2 bg-brand-green hover:bg-brand-green-hover text-text-white cursor-pointer rounded-lg hover:bg- disabled:bg-zinc-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    <span>{isEdit ? 'Updating...' : 'Adding...'}</span>
+                                </>
+                            ) : (
+                                <span>{isEdit ? 'Update Shop' : 'Add Shop'}</span>
+                            )}
+                        </button>
+
                     </div>
                 </form>
             </div>

@@ -32,28 +32,28 @@ export interface Verification {
 }
 
 export interface Shop {
-  id: string;
-  name: string;
+  id?: string;
+  shopName: string;
   description?: string;
-  location: string;
+  address: string;
   coordinates: { lat: number; lng: number };
-  coverPhoto: string;
-  otherPhotos: string[];
+  photo: string;
+  photos: string[];
   businessHours: BusinessHours;
-  businessType: 'SARI_SARI_STORE' | 'GROCERY' | 'CONVENIENCE_STORE' | 'MINI_MART' | 'Sari-Sari Store' | 'Grocery' | 'Convenience Store' | 'Mini-Mart';
+  businessType?: 'SARI_SARI_STORE' | 'GROCERY' | 'CONVENIENCE_STORE' | 'MINI_MART' | 'Sari-Sari Store' | 'Grocery' | 'Convenience Store' | 'Mini-Mart';
   paymentMethods: PaymentMethods;
   delivery: DeliveryOptions;
   socialMedia: SocialMedia;
-  verification: Verification;
+  verification?: Verification;
   contactDetails: {
     phone: string;
     email: string;
     address: string;
   };
-  inventory: Item[];
+  inventory?: Item[];
   rating?: number;
-  createdAt: string;
+  createdAt?: string;
   updatedAt?: string;
   createdBy?: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'active' | 'inactive' | 'suspended';
+  status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'active' | 'inactive' | 'suspended';
 }

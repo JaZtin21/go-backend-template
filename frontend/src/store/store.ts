@@ -1,9 +1,11 @@
 import { configureStore } from '@reduxjs/toolkit';
 import uiReducer from './uiSlice';
+import myShopsSlice from './myShopsSlice';
 
 export const store = configureStore({
     reducer: {
-        ui: uiReducer, // Your UI state is now registered globally
+        ui: uiReducer,
+        myShops: myShopsSlice, // Your UI state is now registered globally
     },
 });
 

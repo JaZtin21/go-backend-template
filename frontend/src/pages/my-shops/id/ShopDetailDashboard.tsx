@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { RootState } from '~/store/store'; // Adjust import path to match your file structure
+import { Shop } from '~/types/shop';
+import { ShopForm } from '~/pages/my-shops/components/ShopForm';
+import { Modal } from '~/components';
+import { useSelector, useDispatch } from 'react-redux';
 import {
     ResponsiveContainer,
     AreaChart,
     Area,
     XAxis,
     YAxis,
+    Legend,
     Tooltip,
     CartesianGrid,
     BarChart,
@@ -14,6 +20,8 @@ import {
     RadialBar
 } from 'recharts';
 import { ShoppingCart, PlusCircle, Package, MessageSquare, Store, ArrowLeft } from 'lucide-react';
+import { setAddShopModalOpen } from '~/store/uiSlice';
+
 
 // ... Keep SHOP_METRICS mock data exactly the same ...
 const SHOP_METRICS = {
@@ -50,60 +58,23 @@ export const ShopDetailDashboard = () => {
     const { id } = useParams<{ id: string }>();
     const shopId = id || "1";
     const navigate = useNavigate();
+    const dispatch = useDispatch();
+    const isAddShopModalOpen = useSelector((state: RootState) => state.ui.isAddShopModalOpen);
 
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [modalTitle, setModalTitle] = useState('');
+    const shop = useSelector((state: RootState) =>
+        state.myShops.shops.find((s: Shop) => s.id === id)
+    );
+
+
+    const handleModalClose = () => {
+        dispatch(setAddShopModalOpen(false))
+    };
 
     const triggerModalAction = (title: string) => {
-        setModalTitle(title);
-        setIsModalOpen(true);
+        dispatch(setAddShopModalOpen(true));
     };
 
-    // Helper to render the exact SVG circle progress bars matching your image
-    const ProgressCircle = ({ percentage, value, label, colorClass, trailColorClass }: {
-        percentage: number;
-        value: string | number;
-        label: React.ReactNode;
-        colorClass: string;
-        trailColorClass: string;
-    }) => {
-        const radius = 50;
-        const strokeWidth = 10;
-        const circumference = 2 * Math.PI * radius;
-        const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
-        return (
-            <div className="flex flex-col items-center text-center group cursor-pointer w-full max-w-[160px]">
-                <div className="w-36 h-36 relative flex items-center justify-center group-hover:scale-105 transition-all duration-300">
-                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 120 120">
-                        {/* Background Gray/Muted Ring */}
-                        <circle
-                            cx="60" cy="60" r={radius}
-                            strokeWidth={strokeWidth}
-                            className={`${trailColorClass} stroke-current`}
-                            fill="transparent"
-                        />
-                        {/* Filled Color Progress Ring */}
-                        <circle
-                            cx="60" cy="60" r={radius}
-                            strokeWidth={strokeWidth}
-                            className={`${colorClass} stroke-current transition-all duration-500 ease-out`}
-                            strokeDasharray={circumference}
-                            strokeDashoffset={strokeDashoffset}
-                            strokeLinecap="round"
-                            fill="transparent"
-                        />
-                    </svg>
-                    {/* Absolute Center Text Content */}
-                    <div className="absolute flex flex-col items-center justify-center">
-                        <span className="text-base font-black text-text-main">{value}</span>
-                        {label}
-                    </div>
-                </div>
-                <span className="text-xs font-bold text-text-sub tracking-wide mt-2">Total Sales Today</span>
-            </div>
-        );
-    };
 
     return (
         <div className="min-h-screen bg-bg-secondary transition-colors duration-300 pb-12">
@@ -128,16 +99,52 @@ export const ShopDetailDashboard = () => {
 
                     {/* SECTION 1: MASTER RECHARTS RADIAL BAR (Today's Lift) */}
                     <div className="flex items-center gap-10 shrink-0 flex-1 max-w-md">
-                        <div className="w-70 h-70 relative flex items-center justify-center shrink-0">
+                        <div className="w-80 h-80 relative flex items-center justify-center shrink-0">
                             <ResponsiveContainer width="100%" height="100%">
-                                <RadialBarChart cx="50%" cy="50%" innerRadius="80%" outerRadius="100%" barSize={20} data={[{ value: SHOP_METRICS.progressMetrics.todayLiftPct, fill: 'var(--color-brand-green)' }]} startAngle={90} endAngle={-270}>
-                                    <RadialBar background={{ fill: 'var(--color-brand-green)', opacity: 0.1 }} dataKey="value" cornerRadius={10} />
+                                <RadialBarChart
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius="80%"
+                                    outerRadius="100%"
+                                    barSize={20}
+                                    data={[{ value: SHOP_METRICS.progressMetrics.todayLiftPct, fill: 'var(--color-brand-green)' }]}
+                                    startAngle={90}
+                                    endAngle={-270}
+                                >
+                                    {/* The radial data track */}
+                                    <RadialBar
+                                        background={{ fill: 'var(--color-brand-green)', opacity: 0.1 }}
+                                        dataKey="value"
+                                        cornerRadius={10}
+                                    />
+
+                                    {/* NATIVE CENTERING COMPONENT BLOCK */}
+                                    <Legend
+                                        layout="vertical"
+                                        verticalAlign="middle"
+                                        align="center"
+                                        content={() => (
+                                            <div className="text-center flex flex-col items-center justify-center select-none ">
+                                                {/* 1. STORE NAME STACKED ON TOP */}
+                                                <span className="text-md line-clamp-2 font-bold text-text-muted tracking-tight max-w-[160px] mb-1 mt-[-2rem]">
+                                                    {shop?.shopName}
+                                                </span>
+
+                                                {/* 2. EARNINGS DISPLAY ROW */}
+                                                <span className="text-4xl font-black text-text-main tracking-tighter leading-none mt-2">
+                                                    {SHOP_METRICS.stats.todaySales}
+                                                </span>
+
+                                                {/* 3. METRICS RATIO BASEMENT */}
+                                                <p className="text-xs text-brand-green font-extrabold mt-2">
+                                                    {SHOP_METRICS.stats.growthRate}
+                                                </p>
+                                            </div>
+                                        )}
+                                    />
                                 </RadialBarChart>
+
                             </ResponsiveContainer>
-                            <div className="absolute text-center">
-                                <span className="text-4xl font-black text-text-main tracking-tighter">{SHOP_METRICS.stats.todaySales}</span>
-                                <p className="text-sm text-brand-green font-extrabold mt-1.5">{SHOP_METRICS.stats.growthRate}</p>
-                            </div>
                         </div>
                         <div className="flex flex-col">
                             <span className="text-2xl font-black text-text-main tracking-tight">Today's Lift</span>
@@ -295,48 +302,14 @@ export const ShopDetailDashboard = () => {
             </div>
 
 
-            {/* --- MODAL PLACED SAFELY OUTSIDE THE GRID ITEMS --- */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-xs transition-all animate-fade-in">
-                    <div className="bg-bg-primary w-full max-w-sm rounded-2xl p-6 shadow-xl border border-bg-secondary transform scale-100 transition-all">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-sm font-bold text-text-main">{modalTitle}</h3>
-                            <button
-                                onClick={() => setIsModalOpen(false)}
-                                className="text-text-muted hover:text-text-main font-bold text-xs p-1 cursor-pointer"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        <div className="space-y-3 py-1">
-                            <p className="text-xs text-text-sub">
-                                Modify live storefront metrics configuration mapping parameters below.
-                            </p>
-                            <input
-                                type="text"
-                                placeholder="Update data field..."
-                                className="w-full h-9 px-3 bg-bg-secondary rounded-lg text-xs font-medium text-text-main placeholder-text-muted focus:outline-none border border-transparent focus:ring-1 focus:ring-brand-gold"
-                            />
-                        </div>
-
-                        <div className="flex justify-end gap-2 mt-5">
-                            <button
-                                onClick={() => setIsModalOpen(false)}
-                                className="h-8 px-3 rounded-lg text-xs font-bold text-text-sub bg-bg-secondary hover:bg-bg-primary-hover cursor-pointer"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => setIsModalOpen(false)}
-                                className="h-8 px-3 rounded-lg text-xs font-bold text-text-white bg-brand-green hover:bg-brand-green-hover cursor-pointer"
-                            >
-                                Save Changes
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <Modal
+                isOpen={isAddShopModalOpen}
+                onClose={handleModalClose}
+                title="Edit your Shop"
+                subtitle="Edit your commercial storefront blueprint"
+            >
+                <ShopForm data={shop} />
+            </Modal>
 
         </div>
     );

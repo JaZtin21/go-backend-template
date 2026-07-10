@@ -1,15 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from "../../store/store";
 import { useSelector, useDispatch } from 'react-redux';
 import { Modal } from "~/components";
 import { setAddShopModalOpen } from '../../store/uiSlice';
 import { ShopForm } from './components/ShopForm';
-
-// 1. IMPORT APOLLO HOOK AND YOUR QUERY bluePrint
-
+import { setShops, setLoading, setError } from '~/store/myShopsSlice';
 import { useQuery } from '@apollo/client/react';
-import { GET_MY_SHOPS_QUERY } from '~/api/graphql/'; // Adjust import path as needed
+import { GET_MY_SHOPS_QUERY } from '~/api/graphql/'; // Ensure GET_MY_SHOPS_QUERY uses TypedDocumentNode in its source file
+import type { Shop } from '~/types/shop';
+import { Plus, Store } from 'lucide-react';
+
+
+interface GetMyShopsResponse {
+    getMyShops: {
+        shops: Shop[];
+        totalCount: number;
+        hasNextPage: boolean;
+    };
+}
+
 
 export const MyShops: React.FC = () => {
     const navigate = useNavigate();
@@ -20,20 +30,37 @@ export const MyShops: React.FC = () => {
     const PAGE_LIMIT = 10;
     const [offset, setOffset] = useState<number>(0);
 
-    // 2. CONNECT HOOK BINDING WITH VARIABLES STRATEGY
+    // 1. RUN APOLLO FETCH QUERY (Types inferred automatically via type inference)
     const { loading: isLoading, error, data } = useQuery(GET_MY_SHOPS_QUERY, {
-        variables: {
-            limit: PAGE_LIMIT,
-            offset: offset,
-        },
-        fetchPolicy: 'cache-and-network', // Ensure ui updates smoothly when returning to dashboard
-    });
+        variables: { limit: PAGE_LIMIT, offset: offset },
+        fetchPolicy: 'cache-and-network',
+    }) as { loading: boolean; error: any; data: GetMyShopsResponse | undefined };
 
-    // Unpack data streams carefully matching server metadata footprints
-    const paginatedPayload = data?.getMyShops;
-    const loadedShops = paginatedPayload?.shops || [];
-    const totalCount = paginatedPayload?.totalCount || 0;
-    const hasNextPage = paginatedPayload?.hasNextPage || false;
+    // 2. READ DIRECTLY FROM REDUX STORAGE CACHE FOR VIEW TRANSFORMS
+    const loadedShops = useSelector((state: RootState) => state.myShops.shops);
+    const totalCount = useSelector((state: RootState) => state.myShops.totalCount);
+
+    // 3. LIFECYCLE DATA BOUNDARY BUFFER MANAGEMENT SYNC
+    useEffect(() => {
+        dispatch(setLoading(isLoading));
+
+        if (error) {
+            dispatch(setError(error.message));
+            return;
+        }
+
+        if (data?.getMyShops) {
+            dispatch(
+                setShops({
+                    shops: data.getMyShops.shops,
+                    totalCount: data.getMyShops.totalCount,
+                })
+            );
+        }
+    }, [data, isLoading, error, dispatch]);
+
+    // Compute navigation parameters based on local state slices instead of flat payloads
+    const hasNextPage = offset + PAGE_LIMIT < totalCount;
     const hasPreviousPage = offset > 0;
 
     // Control Handlers
@@ -59,7 +86,7 @@ export const MyShops: React.FC = () => {
                 )}
 
                 {/* 3-COLUMN RESPONSIVE LAYOUT MATRIX GRID */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4  gap-6 max-w-full mt-4">
 
                     {isLoading ? (
                         /* --- DESIGN A: ANIMATED SKELETON LAYOUT MAPPING (3 Items) --- */
@@ -81,12 +108,14 @@ export const MyShops: React.FC = () => {
                         ))
                     ) : loadedShops.length === 0 ? (
                         /* --- FALLBACK: EMPTY STATE BOUNDARY DISPLAY CONTAINER --- */
-                        <div className="col-span-1 md:col-span-1 flex flex-col items-center justify-center p-12 bg-bg-primary rounded-2xl border border-dashed border-bg-secondary text-center">
-                            <p className="text-sm font-bold text-text-main mb-2">No Shops Added Yet</p>
-                            <p className="text-xs font-medium text-text-muted mb-4">You have not created any commercial storefront entries yet.</p>
+                        <div className="flex flex-col h-[500px] align-center p-9 text-center justify-center bg-bg-primary rounded-2xl shadow-xs transition-shadow hover:shadow-sm "
+                        >
+                            <Store className="self-center text-brand-gold md:h-18 md:w-18 h-10 w-10 " />
+                            <p className="text-lg font-bold text-text-main mb-2">No Shops Added Yet</p>
+                            <p className="text-md font-medium text-text-muted mb-4">You have not created any commercial storefront entries yet.</p>
                             <button
                                 onClick={() => dispatch(setAddShopModalOpen(true))}
-                                className="h-9 px-4 rounded-lg bg-brand-gold text-text-white text-xs font-bold cursor-pointer"
+                                className="py-4 px-4 rounded-lg bg-brand-gold hover:bg-brand-gold-hover text-text-white text-xs font-bold cursor-pointer"
                             >
                                 Click to Add Your First Shop
                             </button>
@@ -136,8 +165,8 @@ export const MyShops: React.FC = () => {
 
                                     <button
                                         onClick={(e) => {
-                                            e.stopPropagation();
-                                            console.log('Manage target ID:', shop.id);
+                                            e.stopPropagation(); // 🟢 THE FIX: Add this line to kill the double history push!
+                                            navigate(`/my-shops/${shop.id}`);
                                         }}
                                         className="h-8 rounded-lg bg-brand-gold hover:bg-brand-gold-hover active:scale-98 transition-all px-4 text-xs font-bold text-text-white cursor-pointer border border-transparent"
                                     >
@@ -147,6 +176,17 @@ export const MyShops: React.FC = () => {
                             </div>
                         ))
                     )}
+                    <div className={`flex ${loadedShops.length === 0 ? "hidden" : ""} flex-col align-center p-9 text-center justify-center bg-bg-primary rounded-2xl shadow-xs transition-shadow hover:shadow-sm`}>
+                        <Plus className="self-center text-brand-gold md:h-18 md:w-18 h-10 w-10 " />
+                        <p className="text-lg font-bold text-text-main mb-2">Add Another Shop</p>
+                        <p className="text-md font-medium text-text-muted mb-4">create your next shop</p>
+                        <button
+                            onClick={() => dispatch(setAddShopModalOpen(true))}
+                            className="py-4 px-4 rounded-lg bg-brand-gold hover:bg-brand-gold-hover text-text-white text-xs font-bold cursor-pointer"
+                        >
+                            Add Shop
+                        </button>
+                    </div>
                 </div>
 
                 {/* 4. INTEGRATED FOOTER CONTROL STRIP STRATEGY */}
@@ -174,7 +214,7 @@ export const MyShops: React.FC = () => {
                     </div>
                 )}
 
-            </div>
+            </div >
             <Modal
                 isOpen={isAddShopModalOpen}
                 onClose={() => dispatch(setAddShopModalOpen(false))}
