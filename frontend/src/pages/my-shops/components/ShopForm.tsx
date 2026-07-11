@@ -7,6 +7,8 @@ import type { Shop } from "~/types/shop";
 import { useDispatch } from 'react-redux';
 import { addShop, updateShop } from '~/store/myShopsSlice';
 import { setAddShopModalOpen } from '~/store/uiSlice';
+import { Modal } from "~/components";
+import { Check, X } from 'lucide-react';
 
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400';
 
@@ -25,11 +27,56 @@ const ImageIcon = ({ className }: { className?: string }) => (
 
 
 export const ShopForm = ({ data }: { data?: Shop }) => {
-    console.log('is this loggn');
+
     const isEdit: boolean = !!data && Object.keys(data).length > 0;
     const shop: Shop | undefined = data;
 
     console.log(isEdit, shop);
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false);
+    const [modalMessage, setModalMessage] = useState('');
+    const [errorMessage, setErrorMessage] = useState('');
+
+
+    const openModal = ({ isSuccess, type, error }: { isSuccess: boolean, type: string, error?: string }) => {
+
+        if (isSuccess) {
+            if (type === 'add') {
+                setIsModalOpen(true);
+                setIsSuccess(true);
+                setModalMessage('Shop created successfully!');
+            } else {
+                setIsModalOpen(true);
+                setIsSuccess(true);
+                setModalMessage('Shop updated successfully!');
+            }
+
+        } else {
+            if (type === 'add') {
+                setIsModalOpen(true);
+                setIsSuccess(false);
+                setModalMessage('Failed to create shop. Please try again.');
+                setErrorMessage(error || '');
+            } else {
+                setIsModalOpen(true);
+                setIsSuccess(false);
+                setModalMessage('Failed to update shop. Please try again.');
+                setErrorMessage(error || '');
+            }
+
+        }
+
+    }
+
+    const handleModalClose = () => {
+        setIsModalOpen(false);
+        setIsSuccess(false);
+        setModalMessage('');
+        dispatch(setAddShopModalOpen(false));
+    };
+
+
     const dispatch = useDispatch();
 
     // CREATE MUTATION HANDLER
@@ -37,10 +84,11 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
         onCompleted: (res: any) => {
             console.log('res this shop', res);
             dispatch(addShop(res.createShop));
-            dispatch(setAddShopModalOpen(false));
+            openModal({ isSuccess: true, type: 'add' });
         },
         onError: (err) => {
             console.error("Create Shop Mutation Error:", err);
+            openModal({ isSuccess: false, type: 'add', error: err.message });
         }
     });
 
@@ -49,12 +97,12 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
         onCompleted: (res: any) => {
             if (res?.updateShop) {
                 dispatch(updateShop(res.updateShop));
-                dispatch(setAddShopModalOpen(false));
+                openModal({ isSuccess: true, type: 'update' });
             }
         },
         onError: (err) => {
             console.error("GraphQL Save Failure:", err);
-            alert("Failed to sync structural edits to database.");
+            openModal({ isSuccess: false, type: 'update', error: err.message });
         }
     });
 
@@ -394,7 +442,7 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center gap-2 px-4 py-2 bg-brand-gold shadow-xs hover:bg-brand-gold-hover cursor-pointer text-text-main rounded-lg hover:bg-primary-700 dark:hover:bg-primary-700 transition-colors"
+                                className="flex items-center gap-2 px-4 py-2 bg-brand-gold shadow-xs hover:bg-brand-gold-hover cursor-pointer text-text-white rounded-lg  transition-colors"
                             >
                                 <ImageIcon className="w-5 h-5" />
                                 <span>{coverPhotoPreview ? 'Change Photo' : 'Upload Photo'}</span>
@@ -446,6 +494,43 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
                     </div>
                 </form>
             </div>
+            {
+
+            }
+            <Modal
+                isOpen={isModalOpen}
+                onClose={handleModalClose}
+                title={isSuccess ? "Yay!" : "Error"}
+                subtitle=""
+            >
+                <div className="flex flex-col items-center justify-center p-6 min-h-[200px]">
+                    {/* Visual Success/Error Indicator Anchor (Optional styling) */}
+                    <div className=''>
+                        {isSuccess ? (
+                            <Check className="w-8 h-8 text-brand-green" />
+                        ) : (
+                            <X className="w-8 h-8 text-brand-red" />
+                        )}
+                    </div>
+
+                    {/* Dynamic Text Content */}
+                    <p className="mt-2 text-lg text-text-main dark:text-zinc-400">
+                        {modalMessage}
+                    </p>
+
+                    <p className={`mt-2 ${isSuccess ? 'hidden' : ''} text-sm text-text-main dark:text-zinc-400`}>
+                        {errorMessage}
+                    </p>
+
+                    {/* Confirmation Button to trigger close function */}
+                    <button
+                        onClick={handleModalClose}
+                        className='mt-4 p-2 px-4 bg-brand-green hover:bg-brand-green-hover cursor-pointer text-text-main rounded-lg  transition-colors'
+                    >
+                        OK
+                    </button>
+                </div>
+            </Modal>
         </div>
     );
 }
