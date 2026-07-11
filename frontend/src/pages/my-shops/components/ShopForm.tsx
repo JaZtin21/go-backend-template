@@ -25,16 +25,14 @@ const ImageIcon = ({ className }: { className?: string }) => (
 
 
 export const ShopForm = ({ data }: { data?: Shop }) => {
-
     console.log('is this loggn');
     const isEdit: boolean = !!data && Object.keys(data).length > 0;
-    const shop: Shop | undefined = data
+    const shop: Shop | undefined = data;
 
     console.log(isEdit, shop);
-
     const dispatch = useDispatch();
 
-
+    // CREATE MUTATION HANDLER
     const [createShop, { loading: createLoading }] = useMutation(CREATE_SHOP_MUTATION, {
         onCompleted: (res: any) => {
             console.log('res this shop', res);
@@ -45,11 +43,11 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
             console.error("Create Shop Mutation Error:", err);
         }
     });
-    // 1. Initialize your Apollo Client Mutation hook with an explicit completion listener
+
+    // UPDATE MUTATION HANDLER
     const [updateShopMutation, { loading: isMutationLoading }] = useMutation(UPDATE_SHOP_MUTATION, {
         onCompleted: (res: any) => {
             if (res?.updateShop) {
-                //  DISPATCH ACTION: Updates the shop item where ID matches instantly inside the Redux array
                 dispatch(updateShop(res.updateShop));
                 dispatch(setAddShopModalOpen(false));
             }
@@ -60,9 +58,10 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
         }
     });
 
-    const onCancel = () => { }
-    const isLoading = createLoading || isMutationLoading
+    const onCancel = () => { };
+    const isLoading = createLoading || isMutationLoading;
 
+    // FORM STATE HANDLERS
     const [formData, setFormData] = useState({
         name: shop?.shopName || '',
         description: shop?.description || '',
@@ -76,15 +75,16 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
         businessDays: shop?.businessHours?.days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     });
 
-    // Cover photo upload state - track existing and new separately like EditPostModal
+    // COVERS ASSET LOGIC MANAGEMENT (REFACTORED STRATEGY SIMILAR TO EDITPOSTMODAL)
     const [existingCoverPhoto, setExistingCoverPhoto] = useState<string>(typeof shop?.photo === 'string' ? shop.photo : '');
     const [newCoverFile, setNewCoverFile] = useState<File | null>(null);
     const [newCoverPreview, setNewCoverPreview] = useState<string>('');
 
+    // CAROUSEL GALLERY LOGIC MANAGEMENT (ADDED TO SUPPORT PREVIOUS BLOCK STRUCTURE)
+    const [existingGalleryPhotos, setExistingGalleryPhotos] = useState<string[]>(shop?.photos || []);
+    const [newGalleryFiles, setNewGalleryFiles] = useState<File[]>([]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // Combined preview for display
     const coverPhotoPreview = newCoverPreview || existingCoverPhoto;
 
     const handleLocationSelect = (coordinates: { lat: number; lng: number }, address: string) => {
@@ -102,7 +102,6 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
 
         const file = files[0];
 
-        // Revoke previous preview URL if it was a blob URL
         if (newCoverPreview && newCoverPreview.startsWith('blob:')) {
             URL.revokeObjectURL(newCoverPreview);
         }
@@ -116,12 +115,10 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
         if (newCoverPreview && newCoverPreview.startsWith('blob:')) {
             URL.revokeObjectURL(newCoverPreview);
         }
-        // If there's a new file, remove it
         if (newCoverFile) {
             setNewCoverFile(null);
             setNewCoverPreview('');
         } else {
-            // Otherwise remove the existing
             setExistingCoverPhoto('');
         }
         if (fileInputRef.current) {
@@ -129,8 +126,9 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
         }
     };
 
-    console.log(existingCoverPhoto, 'this is cover hpoto')
+    console.log(existingCoverPhoto, 'this is cover hpoto');
 
+    // SUBMIT HANDLER DISPATCH CONTROLLER
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -139,22 +137,8 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
             return;
         }
 
-        {
-            /*
-    if (!formData.address) {
-            alert('Please select a location');
-            return;
-        }
-            */
-        }
-
-
-        // Build complete Shop object with all required fields for API
-        // Build complete Shop object with all required fields for API
-        const shopData: Shop = {
-            // 🟢 FIXED: Send the raw File object if it exists, otherwise pass null
-            photo: newCoverFile ? newCoverFile : existingCoverPhoto ? existingCoverPhoto : null,
-            photos: [], // Add your carousel file arrays here if you have any
+        // 1. Build common baseline parameters object mapping
+        const basePayload: any = {
             shopName: formData.name,
             description: formData.description,
             address: '123',
@@ -189,28 +173,48 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
             },
         };
 
-
-        console.log(existingCoverPhoto, shopData);
+        console.log(existingCoverPhoto, basePayload);
 
         if (isEdit) {
+            // 2. 🟢 EDIT BRANCH REFACTOR: Uses your specialized separate text/file fields
+            const updateInput: any = {
+                ...basePayload,
+                shopId: shop?.id || '',
+
+                // Pass existing strings back normally (Pass null if cleared out to trigger cleanup!)
+                photo: existingCoverPhoto || null,
+                photos: existingGalleryPhotos,
+            };
+
+            // Attach new file payload property ONLY if a file was actually chosen
+            if (newCoverFile) {
+                updateInput.newPhoto = newCoverFile;
+            }
+
+            // Attach new carousel items ONLY if additional selections exist
+            if (newGalleryFiles.length > 0) {
+                updateInput.newPhotos = newGalleryFiles;
+            }
+
             updateShopMutation({
                 variables: {
-                    input: {
-                        ...shopData,
-                        shopId: shop?.id // 🟢 FIXED: Maps the identifier to the correct backend expected key name
-                    }
+                    input: updateInput
                 }
             });
         } else {
+            // 3. 🟢 CREATE BRANCH REFACTOR: Uses regular Upload field mapping configuration
+            const createInput: any = {
+                ...basePayload,
+                photo: newCoverFile ? newCoverFile : null,
+                photos: newGalleryFiles.length > 0 ? newGalleryFiles : [],
+            };
+
             createShop({
                 variables: {
-                    input: shopData
+                    input: createInput
                 }
             });
         }
-
-        // Pass both existing URL and new File - upload happens via GraphQL mutation
-        // Like EditPostModal: passes existing photos + new files
     };
 
     return (
@@ -341,7 +345,7 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
                                                 : [...currentDays, day];
                                             setFormData({ ...formData, businessDays: newDays });
                                         }}
-                                        className={`px-3 py-1.5 rounded-lg text-sm  text-text-main font-medium transition-colors ${formData.businessDays.includes(day)
+                                        className={`px-3 py-1.5 rounded-lg text-sm cursor-pointer  text-text-main font-medium transition-colors ${formData.businessDays.includes(day)
                                             ? 'bg-brand-gold text-white '
                                             : 'bg-zinc-100 dark:bg-zinc-700 text-text-main hover:bg-zinc-200 dark:hover:bg-zinc-600'
                                             }`}
@@ -390,7 +394,7 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center gap-2 px-4 py-2 bg-primary dark:bg-primary text-text-main rounded-lg hover:bg-primary-700 dark:hover:bg-primary-700 transition-colors"
+                                className="flex items-center gap-2 px-4 py-2 bg-brand-gold shadow-xs hover:bg-brand-gold-hover cursor-pointer text-text-main rounded-lg hover:bg-primary-700 dark:hover:bg-primary-700 transition-colors"
                             >
                                 <ImageIcon className="w-5 h-5" />
                                 <span>{coverPhotoPreview ? 'Change Photo' : 'Upload Photo'}</span>

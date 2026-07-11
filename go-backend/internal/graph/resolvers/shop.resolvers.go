@@ -22,6 +22,21 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
+func diffPhotoURLs(oldSlice, currentSlice []string) []string {
+	diff := []string{}
+	currentMap := make(map[string]bool)
+
+	for _, url := range currentSlice {
+		currentMap[url] = true
+	}
+	for _, url := range oldSlice {
+		if !currentMap[url] {
+			diff = append(diff, url)
+		}
+	}
+	return diff
+}
+
 // CreateShop is the resolver for the createShop field.
 func (r *mutationResolver) CreateShop(ctx context.Context, input model.CreateShopInput) (*model.OwnerShop, error) {
 	// SECURITY GUARD: Enforce valid user identity state from Redis session
@@ -195,11 +210,7 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 
 	checkQuery := "SELECT owner_id, status, verification, photo, photos FROM shops WHERE id = $1 LIMIT 1"
 	err := r.Resolver.DB.QueryRow(ctx, checkQuery, input.ShopID).Scan(
-		&dbOwnerID,
-		&statusJSON,
-		&verificationJSON,
-		&oldPrimaryPhoto,
-		&oldPhotosSlice,
+		&dbOwnerID, &statusJSON, &verificationJSON, &oldPrimaryPhoto, &oldPhotosSlice,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -221,14 +232,13 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 		return nil, nil
 	}
 
-	// INITIALIZE THE CLOUDINARY UPLOADER UTILITY
+	// INITIALIZE THE CLOUDINARY UPLOADER UTILITY VIA REGULAR ENVS
 	uploader, err := imageutil.NewImageUploader(
 		os.Getenv("CLOUDINARY_CLOUD_NAME"),
 		os.Getenv("CLOUDINARY_API_KEY"),
 		os.Getenv("CLOUDINARY_API_SECRET"),
 		os.Getenv("CLOUDINARY_FOLDER"),
 	)
-
 	if err != nil {
 		log.Printf("🔴 FAILED TO INITIALIZE CLOUDINARY UPLOADER IN UPDATESHOP: %v", err)
 		return nil, fmt.Errorf("media processor error")
@@ -238,80 +248,53 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 	shopUploader := uploader.WithFolder(uploadFolder)
 
 	// =========================================================================
-	// 1. BACKEND COMPARISON FOR PRIMARY PHOTO
+	// 1. PRIMARY COVER PHOTO REFACTOR (Matches your old Post logic)
 	// =========================================================================
 	finalPrimaryPhoto := ""
-	if oldPrimaryPhoto != nil {
-		finalPrimaryPhoto = *oldPrimaryPhoto
+	if input.Photo != nil {
+		finalPrimaryPhoto = *input.Photo // Take what the frontend wants to preserve
 	}
 
-	if input.Photo != nil && input.Photo.File != nil {
-		// Rule: New file is different from the DB. Delete the old asset from Cloudinary.
-		if oldPrimaryPhoto != nil && *oldPrimaryPhoto != "" {
-			if cleanErr := shopUploader.DeleteImageByURL(ctx, *oldPrimaryPhoto); cleanErr != nil {
-				log.Printf("⚠️ Failed to delete overwritten primary image: %v", cleanErr)
-			}
-		}
+	// Compare DB record with incoming state: if it changed or cleared, flag it for cleanup
+	var deletedPrimaryPhoto string
+	if oldPrimaryPhoto != nil && *oldPrimaryPhoto != "" && *oldPrimaryPhoto != finalPrimaryPhoto {
+		deletedPrimaryPhoto = *oldPrimaryPhoto
+	}
 
-		// Upload the new replacement image
-		result, uploadErr := shopUploader.UploadImage(ctx, input.Photo.File, input.Photo.Filename)
+	// Process the new cover binary upload if sent by the client
+	if input.NewPhoto != nil && input.NewPhoto.File != nil {
+		result, uploadErr := shopUploader.UploadImage(ctx, input.NewPhoto.File, input.NewPhoto.Filename)
 		if uploadErr == nil {
 			finalPrimaryPhoto = result.URL
 		} else {
 			log.Printf("🔴 Primary photo upload failed: %v", uploadErr)
 		}
-	} else {
-		// 🟢 THE CONDITION I MISSED: Frontend sent null (wants to delete it)
-		// Access the current DB string we fetched and destroy it on Cloudinary
-		if oldPrimaryPhoto != nil && *oldPrimaryPhoto != "" {
-			if cleanErr := shopUploader.DeleteImageByURL(ctx, *oldPrimaryPhoto); cleanErr != nil {
-				log.Printf("⚠️ Failed to delete removed primary image: %v", cleanErr)
-			}
-		}
-		// Clear the string so it saves as empty/NULL in the database column
-		finalPrimaryPhoto = ""
 	}
 
 	// =========================================================================
-	// 2. BACKEND COMPARISON FOR GALLERY CAROUSEL (FIXED WITH ELSE CONDITION)
+	// 2. GALLERY CAROUSEL REFACTOR (Matches your old Post logic)
 	// =========================================================================
-	var finalPhotosSlice []string
+	finalPhotosSlice := []string{}
+	if input.Photos != nil {
+		finalPhotosSlice = append([]string{}, input.Photos...) // Seed with retained URLs
+	}
 
-	// Only trigger Cloudinary logic if a new set of files is explicitly sent
-	if len(input.Photos) > 0 {
-		// Rule: New files are sent. Delete all old gallery photos from Cloudinary.
-		for _, oldURL := range oldPhotosSlice {
-			if oldURL != "" {
-				if cleanErr := shopUploader.DeleteImageByURL(ctx, oldURL); cleanErr != nil {
-					log.Printf("⚠️ Failed to clean up overwritten gallery image %s: %v", oldURL, cleanErr)
-				}
-			}
-		}
+	// Diffs old database array against incoming retained slice to find deletions
+	var deletedGalleryPhotos []string
+	if input.Photos != nil {
+		deletedGalleryPhotos = diffPhotoURLs(oldPhotosSlice, finalPhotosSlice)
+	}
 
-		// Reset the slice to prepare for the new uploads
-		finalPhotosSlice = []string{}
-		for _, upload := range input.Photos {
-			if upload != nil && upload.File != nil {
-				result, uploadErr := shopUploader.UploadImage(ctx, upload.File, upload.Filename)
-				if uploadErr != nil {
-					log.Printf("⚠️ Additional photo upload failed: %v", uploadErr)
-					continue
-				}
-				finalPhotosSlice = append(finalPhotosSlice, result.URL)
+	// Stream and append any brand new image uploads into the gallery container slice
+	for _, upload := range input.NewPhotos {
+		if upload != nil && upload.File != nil {
+			result, uploadErr := shopUploader.UploadImage(ctx, upload.File, upload.Filename)
+			if uploadErr != nil {
+				log.Printf("⚠️ Additional photo upload failed: %v", uploadErr)
+				continue
 			}
+			finalPhotosSlice = append(finalPhotosSlice, result.URL)
 		}
-	} else {
-		// 🟢 THE CONDITION I MISSED: Frontend sent an empty or null array (wants to clear gallery)
-		// Loop through the exact URLs currently in the DB and destroy them all on Cloudinary
-		for _, oldURL := range oldPhotosSlice {
-			if oldURL != "" {
-				if cleanErr := shopUploader.DeleteImageByURL(ctx, oldURL); cleanErr != nil {
-					log.Printf("⚠️ Failed to clean up deleted gallery image %s: %v", oldURL, cleanErr)
-				}
-			}
-		}
-		// Set it to an empty slice so it completely clears out your PostgreSQL column array
-		finalPhotosSlice = []string{}
 	}
 
 	// =========================================================================
@@ -335,17 +318,9 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 
 	updateQuery := `
 		UPDATE shops 
-		SET shop_name = $1, 
-			address = $2, 
-			description = $3, 
-			photo = $4, 
-			photos = $5,
-			business_hours = $6, 
-			payment_methods = $7, 
-			delivery = $8, 
-			social_media = $9, 
-			contact_details = $10,
-			coordinates = $11
+		SET shop_name = $1, address = $2, description = $3, photo = $4, photos = $5,
+			business_hours = $6, payment_methods = $7, delivery = $8, social_media = $9, 
+			contact_details = $10, coordinates = $11
 		WHERE id = $12
 		RETURNING id, created_at
 	`
@@ -353,18 +328,8 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 	var createdAt time.Time
 
 	err = r.Resolver.DB.QueryRow(ctx, updateQuery,
-		input.ShopName,
-		input.Address,
-		input.Description,
-		finalPrimaryPhoto, // Keeps old URL if no file sent, updates to new URL if file sent
-		finalPhotosSlice,  // Keeps old URLs if no files sent, updates to new URLs if files sent
-		hoursJSON,
-		paymentsJSON,
-		deliveryJSON,
-		socialJSON,
-		contactJSON,
-		coordinatesJSON,
-		input.ShopID,
+		input.ShopName, input.Address, input.Description, finalPrimaryPhoto, finalPhotosSlice,
+		hoursJSON, paymentsJSON, deliveryJSON, socialJSON, contactJSON, coordinatesJSON, input.ShopID,
 	).Scan(&id, &createdAt)
 
 	if err != nil {
@@ -376,47 +341,38 @@ func (r *mutationResolver) UpdateShop(ctx context.Context, input model.UpdateSho
 		return nil, nil
 	}
 
+	// =========================================================================
+	// 4. SECURE CLOUDINARY CLEANUP SWEEPS (Best-effort execution pipeline)
+	// =========================================================================
+	// Clean up cover image from Cloudinary if deleted or overwritten
+	if deletedPrimaryPhoto != "" {
+		_ = shopUploader.DeleteImageByURL(ctx, deletedPrimaryPhoto)
+	}
+
+	// Clean up individual deleted gallery carousel items from Cloudinary
+	for _, photoURL := range deletedGalleryPhotos {
+		if photoURL != "" {
+			_ = shopUploader.DeleteImageByURL(ctx, photoURL)
+		}
+	}
+
 	return &model.OwnerShop{
-		ID:          id,
-		OwnerID:     currentUser.ID,
-		ShopName:    input.ShopName,
-		Address:     input.Address,
-		Description: input.Description,
-		Photo:       &finalPrimaryPhoto,
-		Photos:      finalPhotosSlice,
-		CreatedAt:   createdAt.Format(time.RFC3339),
-		Coordinates: &model.Coordinates{
-			Lat: input.Coordinates.Lat,
-			Lng: input.Coordinates.Lng,
-		},
-		BusinessHours: &model.BusinessHours{
-			OpenTime:  input.BusinessHours.OpenTime,
-			CloseTime: input.BusinessHours.CloseTime,
-			Days:      input.BusinessHours.Days,
-		},
-		PaymentMethods: &model.PaymentMethods{
-			Cash:    input.PaymentMethods.Cash,
-			Gcash:   input.PaymentMethods.Gcash,
-			Paymaya: input.PaymentMethods.Paymaya,
-			Card:    input.PaymentMethods.Card,
-		},
-		Delivery: &model.DeliveryOptions{
-			Available: input.Delivery.Available,
-			Radius:    input.Delivery.Radius,
-			Fee:       input.Delivery.Fee,
-			MinOrder:  input.Delivery.MinOrder,
-		},
-		SocialMedia: &model.SocialMedia{
-			Facebook:  input.SocialMedia.Facebook,
-			Instagram: input.SocialMedia.Instagram,
-		},
-		ContactDetails: &model.ContactDetails{
-			Phone:   input.ContactDetails.Phone,
-			Email:   input.ContactDetails.Email,
-			Address: input.ContactDetails.Address,
-		},
-		Status:       &currentStatus,
-		Verification: &currentVerification,
+		ID:             id,
+		OwnerID:        currentUser.ID,
+		ShopName:       input.ShopName,
+		Address:        input.Address,
+		Description:    input.Description,
+		Photo:          &finalPrimaryPhoto,
+		Photos:         finalPhotosSlice,
+		CreatedAt:      createdAt.Format(time.RFC3339),
+		Coordinates:    &model.Coordinates{Lat: input.Coordinates.Lat, Lng: input.Coordinates.Lng},
+		BusinessHours:  &model.BusinessHours{OpenTime: input.BusinessHours.OpenTime, CloseTime: input.BusinessHours.CloseTime, Days: input.BusinessHours.Days},
+		PaymentMethods: &model.PaymentMethods{Cash: input.PaymentMethods.Cash, Gcash: input.PaymentMethods.Gcash, Paymaya: input.PaymentMethods.Paymaya, Card: input.PaymentMethods.Card},
+		Delivery:       &model.DeliveryOptions{Available: input.Delivery.Available, Radius: input.Delivery.Radius, Fee: input.Delivery.Fee, MinOrder: input.Delivery.MinOrder},
+		SocialMedia:    &model.SocialMedia{Facebook: input.SocialMedia.Facebook, Instagram: input.SocialMedia.Instagram},
+		ContactDetails: &model.ContactDetails{Phone: input.ContactDetails.Phone, Email: input.ContactDetails.Email, Address: input.ContactDetails.Address},
+		Status:         &currentStatus,
+		Verification:   &currentVerification,
 	}, nil
 }
 

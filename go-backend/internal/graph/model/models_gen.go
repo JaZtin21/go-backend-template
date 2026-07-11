@@ -290,8 +290,10 @@ type UpdateShopInput struct {
 	ContactDetails *ContactDetailsInput  `json:"contactDetails"`
 	Address        string                `json:"address"`
 	Coordinates    *CoordinatesInput     `json:"coordinates"`
-	Photo          *graphql.Upload       `json:"photo,omitempty"`
-	Photos         []*graphql.Upload     `json:"photos,omitempty"`
+	Photo          *string               `json:"photo,omitempty"`
+	NewPhoto       *graphql.Upload       `json:"newPhoto,omitempty"`
+	Photos         []string              `json:"photos,omitempty"`
+	NewPhotos      []*graphql.Upload     `json:"newPhotos,omitempty"`
 }
 
 type User struct {

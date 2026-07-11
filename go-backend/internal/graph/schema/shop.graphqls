@@ -244,8 +244,11 @@ input UpdateShopInput {
   contactDetails: ContactDetailsInput!    #  FIXED
   address: String!
   coordinates: CoordinatesInput!
-  photo: Upload
-  photos: [Upload!]
+  photo: String            # The existing main cover URL (null or "" if deleted)
+  newPhoto: Upload         # Optional fresh file binary to replace the cover
+  
+  photos: [String!]        # The slice of existing gallery URLs to keep
+  newPhotos: [Upload!]
 }
 
 input UpdateInventoryItemInput {
