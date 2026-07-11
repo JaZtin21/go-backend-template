@@ -10,7 +10,10 @@ import { useQuery } from '@apollo/client/react';
 import { GET_MY_SHOPS_QUERY } from '~/api/graphql/'; // Ensure GET_MY_SHOPS_QUERY uses TypedDocumentNode in its source file
 import type { Shop } from '~/types/shop';
 import { Plus, Store } from 'lucide-react';
-
+import { useMutation } from '@apollo/client/react';
+import { DELETE_SHOP_MUTATION } from '~/api/graphql';
+import { Check, TriangleAlert, X } from 'lucide-react';
+import { deleteShop as deleteShopAction } from '~/store/myShopsSlice';
 
 interface GetMyShopsResponse {
     getMyShops: {
@@ -73,6 +76,69 @@ export const MyShops: React.FC = () => {
         e.stopPropagation();
         if (hasPreviousPage) setOffset((prev) => Math.max(0, prev - PAGE_LIMIT));
     };
+
+    const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+    const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false);
+    const [modalMessage, setModalMessage] = useState('');
+
+    // Import the Apollo client mutation hook
+    const [deleteShop, { loading: isDeleting }] = useMutation(DELETE_SHOP_MUTATION, {
+        // Optional: Refetch your shops list query or update Apollo cache here
+        refetchQueries: ['GetShops'],
+        onCompleted: () => {
+            // Reuse your existing modal helper to show success
+            setIsConfirmingDelete(false);
+            setIsModalOpen(true);
+            setIsSuccess(true);
+            setModalMessage('Shop and its entire inventory have been permanently deleted.');
+            if (selectedShopId) {
+                dispatch(deleteShopAction(selectedShopId)); // Make sure action name matches your slice
+            }
+            setSelectedShopId(null);
+        },
+        onError: (error) => {
+            setIsConfirmingDelete(false);
+            setIsModalOpen(true);
+            setIsSuccess(false);
+            setModalMessage(error.message || 'Failed to delete shop. Please try again.');
+            setSelectedShopId(null);
+        }
+    });
+
+
+    // 1. Triggered when user clicks "Delete" on the shop card
+    const handleOpenDeletePrompt = (shopId: string) => {
+        setSelectedShopId(shopId);
+        setIsConfirmingDelete(true);
+        setIsModalOpen(true);
+    };
+
+    // 2. Triggered when user clicks "Yes, Delete" inside the modal
+    const handleExecuteDelete = async () => {
+        if (!selectedShopId) return;
+
+        try {
+            await deleteShop({
+                variables: { shopId: selectedShopId }
+            });
+        } catch (err) {
+            // Error is already gracefully handled inside the useMutation onError block
+        }
+    };
+
+    // 3. Extend your clean-up close handler to reset the deletion states
+    const handleModalClose = () => {
+        setIsModalOpen(false);
+        setIsSuccess(false);
+        setIsConfirmingDelete(false);
+        setSelectedShopId(null);
+        setModalMessage('');
+    };
+
+
 
     return (
         <>
@@ -156,7 +222,7 @@ export const MyShops: React.FC = () => {
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation(); // Block card element click routing action bypasses
-                                            console.log('Delete target ID:', shop.id);
+                                            handleOpenDeletePrompt(shop.id!)
                                         }}
                                         className="h-8 rounded-lg bg-brand-red hover:bg-brand-red-hover active:scale-98 transition-all px-4 text-xs font-bold text-text-white cursor-pointer border border-transparent"
                                     >
@@ -215,6 +281,64 @@ export const MyShops: React.FC = () => {
                 )}
 
             </div >
+            <Modal
+                isOpen={isModalOpen}
+                onClose={handleModalClose}
+                title={isConfirmingDelete ? "Are you absolutely sure?" : (isSuccess ? "Success" : "Error")}
+                subtitle=""
+            >
+                <div className="flex flex-col gap-4 items-center text-center p-2">
+
+                    {isConfirmingDelete ? (
+                        /* --- CONFIRMATION PROMPT VIEW --- */
+                        <div className='p-6 flex gap-6 flex-col'>
+                            <div className="text-3xl self-center"><TriangleAlert className="w-8 h-8 text-brand-red" /></div>
+                            <p className="m-0 text-[15px] max-w-[400px] text-[var(--color-text-sub)] leading-relaxed">
+                                This action cannot be undone. Deleting this shop will <strong className="text-[var(--color-text-main)]">permanently delete all associated inventory, items, and transactional data</strong>.
+                            </p>
+
+                            <div className="flex gap-3 w-full mt-4">
+                                <button
+                                    onClick={handleModalClose}
+                                    disabled={isDeleting}
+                                    className="flex-1 px-4 py-2.5 bg-[var(--color-bg-primary-hover)] hover:bg-[var(--color-border-main)] text-[var(--color-text-sub)] border border-[var(--color-border-main)] rounded-md font-semibold cursor-pointer transition-colors duration-200 disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleExecuteDelete}
+                                    disabled={isDeleting}
+                                    className="flex-1 px-4 py-2.5 bg-[var(--color-brand-red)] hover:bg-[var(--color-brand-red-hover)] text-[var(--color-text-white)] rounded-md font-semibold cursor-pointer transition-colors duration-200 disabled:opacity-50"
+                                >
+                                    {isDeleting ? 'Deleting...' : 'Yes, Delete Everything'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        /* --- ORIGINAL SUCCESS / ERROR VIEW --- */
+                        <div className='p-6 flex gap-6 flex-col'>
+                            <div className="text-2xl self-center">
+                                {isSuccess ? <Check className="w-8 h-8 text-brand-green" /> : <X className="w-8 h-8 text-brand-red" />}
+                            </div>
+                            <p className="m-0 text-base max-w-[400px] text-[var(--color-text-sub)]">
+                                {modalMessage}
+                            </p>
+                            <button
+                                onClick={handleModalClose}
+                                className={`mt-2 px-6 self-center w-unset py-2 text-text-white rounded-md font-semibold cursor-pointer transition-colors duration-200
+                                    ${isSuccess
+                                        ? 'bg-[var(--color-brand-green)] hover:bg-[var(--color-brand-green-hover)]'
+                                        : 'bg-[var(--color-brand-red)] hover:bg-[var(--color-brand-red-hover)]'
+                                    }`}
+                            >
+                                OK
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </Modal>
+
+
             <Modal
                 isOpen={isAddShopModalOpen}
                 onClose={() => dispatch(setAddShopModalOpen(false))}

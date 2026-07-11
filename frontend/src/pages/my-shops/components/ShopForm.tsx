@@ -524,7 +524,7 @@ export const ShopForm = ({ data }: { data?: Shop }) => {
                     {/* Confirmation Button to trigger close function */}
                     <button
                         onClick={handleModalClose}
-                        className='mt-4 p-2 px-4 bg-brand-green hover:bg-brand-green-hover cursor-pointer text-text-main rounded-lg  transition-colors'
+                        className='mt-6 p-2 px-4 bg-brand-green hover:bg-brand-green-hover cursor-pointer text-text-white rounded-lg  transition-colors'
                     >
                         OK
                     </button>

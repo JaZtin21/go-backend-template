@@ -97,7 +97,7 @@ export const UPDATE_SHOP_MUTATION = gql`
 
 
 export const DELETE_SHOP_MUTATION = gql`
-  mutation DeleteShop($shopId: String!) {
+  mutation DeleteShop($shopId: ID!) {
     deleteShop(shopId: $shopId)
   }
 `;
