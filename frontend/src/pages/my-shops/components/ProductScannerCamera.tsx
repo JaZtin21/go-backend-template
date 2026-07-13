@@ -313,7 +313,7 @@ export const ProductScannerCamera = ({ onCaptureComplete }: ProductScannerCamera
     }
 
     return (
-        <div className="relative flex flex-col flex-1 w-full bg-[#3f3f3f] h-full min-h-0">
+        <div className="relative flex flex-col flex-1 w-full bg-bg-secondary h-full min-h-0">
             {cameraError ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center gap-3 text-white">
                     <span className="text-3xl"><TriangleAlert /></span>
@@ -321,7 +321,7 @@ export const ProductScannerCamera = ({ onCaptureComplete }: ProductScannerCamera
                     <button
                         type="button"
                         onClick={startCamera}
-                        className="px-4 py-1.5 text-xs font-bold text-[#3f3f3f] bg-[#d9d9d9] hover:bg-white rounded-md transition-colors cursor-pointer"
+                        className="px-4 py-1.5 text-xs font-bold text-text-main bg-bg-primary hover:bg-bg-primary-hover rounded-md transition-colors cursor-pointer"
                     >
                         Try Again
                     </button>
@@ -333,7 +333,7 @@ export const ProductScannerCamera = ({ onCaptureComplete }: ProductScannerCamera
                         autoPlay
                         playsInline
                         muted
-                        className="absolute inset-0 w-full h-full object-cover bg-[#3f3f3f]"
+                        className="absolute inset-0 w-full h-full object-cover bg-bg-secondary"
                     />
 
                     {isPredicting && (
