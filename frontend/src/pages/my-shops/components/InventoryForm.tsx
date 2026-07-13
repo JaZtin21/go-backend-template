@@ -453,7 +453,7 @@ export default function InventoryForm({ isOpen, onClose, data }: { isOpen: boole
                                 <div className="flex justify-end gap-3 mt-4">
                                     <button
                                         type="button"
-                                        onClick={handleCloseInventoryModal}
+                                        onClick={() => handleCloseInventoryModal()}
                                         className="px-5 py-2 bg-[var(--color-bg-primary-hover)] border border-[var(--color-border-main)] text-[var(--color-text-sub)] rounded-lg font-semibold text-sm cursor-pointer hover:bg-[var(--color-border-main)] transition-colors"
                                     >
                                         Cancel

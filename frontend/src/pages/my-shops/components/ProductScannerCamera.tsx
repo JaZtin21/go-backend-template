@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import { initScannerAssets, getCachedScannerAssets, clearScannerCache } from '~/utils/scannerModelManager';
-import { TriangleAlert } from 'lucide-react';
+import { TriangleAlert, ImageIcon } from 'lucide-react';
 
 interface ProductScannerCameraProps {
     onCaptureComplete: (file: File, previewUrl: string, matchedName: string, unitOfMeasure: string) => void;
@@ -18,6 +18,7 @@ export const ProductScannerCamera = ({ onCaptureComplete }: ProductScannerCamera
     const [loadPhase, setLoadPhase] = useState<'model' | 'names' | 'embeddings' | 'ready' | 'error'>('model');
     const [loadProgress, setLoadProgress] = useState(0);
     const [retryCount, setRetryCount] = useState(0);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const assets = getCachedScannerAssets();
     const isReady = assets.isLoaded;
@@ -232,6 +233,45 @@ export const ProductScannerCamera = ({ onCaptureComplete }: ProductScannerCamera
         setRetryCount(prev => prev + 1);
     };
 
+    const handleGalleryUploadClick = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
+    };
+
+    const handleGalleryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || isPredicting) return;
+
+        setIsPredicting(true);
+        const previewUrl = URL.createObjectURL(file);
+
+        const tempImg = new Image();
+        tempImg.src = previewUrl;
+        tempImg.onload = async () => {
+            const matchedName = await matchProductImage(tempImg);
+            stopCamera();
+
+            let cleanName = matchedName;
+            let unitOfMeasure = '';
+
+            const measureRegex = /(\d+(?:\.\d+)?\s*(?:g|kg|ml|l|oz|pcs|pc|pack|pk|bx|bags))$/i;
+            const match = matchedName.match(measureRegex);
+
+            if (match) {
+                unitOfMeasure = match[1].toLowerCase().replace(/\s+/g, '');
+                cleanName = matchedName.replace(measureRegex, '').trim();
+            }
+
+            if (cleanName.endsWith('-') || cleanName.endsWith(',')) {
+                cleanName = cleanName.slice(0, -1).trim();
+            }
+
+            onCaptureComplete(file, previewUrl, cleanName, unitOfMeasure);
+        };
+    };
+
+
     if (loadPhase !== 'ready') {
         return (
             <div className="relative flex flex-col flex-1 w-full bg-[#3f3f3f] h-full min-h-[400px] items-center justify-center text-white px-8">
@@ -303,13 +343,34 @@ export const ProductScannerCamera = ({ onCaptureComplete }: ProductScannerCamera
                         </div>
                     )}
 
-                    <div className="absolute bottom-6 inset-x-0 flex justify-center items-center z-10">
-                        <button
-                            type="button"
-                            disabled={isPredicting}
-                            onClick={handleCameraCapture}
-                            className="w-14 h-14 rounded-full bg-[#d9d9d9] hover:bg-white border-4 border-[#3f3f3f]/40 shadow-lg transition-all duration-200 cursor-pointer active:scale-95 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
-                        />
+                    <div className="absolute bottom-6 inset-x-0 flex justify-center items-center z-10 px-8">
+                        <div className="relative w-full max-w-[280px] flex items-center justify-center">
+
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                accept="image/*"
+                                onChange={handleGalleryFileChange}
+                                className="hidden"
+                            />
+
+                            <button
+                                type="button"
+                                disabled={isPredicting}
+                                onClick={handleGalleryUploadClick}
+                                className="absolute left-0 p-2.5 rounded-full bg-black/40 hover:bg-black/60 text-white/90 transition-all border border-white/10 cursor-pointer shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <ImageIcon className="w-5 h-5" />
+                            </button>
+
+                            <button
+                                type="button"
+                                disabled={isPredicting}
+                                onClick={handleCameraCapture}
+                                className="w-14 h-14 rounded-full bg-[#d9d9d9] hover:bg-white border-4 border-[#3f3f3f]/40 shadow-lg transition-all duration-200 cursor-pointer active:scale-95 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                            />
+
+                        </div>
                     </div>
                 </div>
             )}
