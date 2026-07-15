@@ -1,344 +1,419 @@
-import React, { useState, useEffect, useRef, act } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from "~/components";
 import { useParams } from 'react-router-dom';
-import { Camera, Pencil } from 'lucide-react';
-import { useMutation } from '@apollo/client/react';
-import { ADD_INVENTORY_ITEM_MUTATION, UPDATE_INVENTORY_ITEM_MUTATION } from '~/api/graphql';
-import { useDispatch } from 'react-redux';
-import { addShop, updateShop } from '~/store/myShopsSlice';
-import {
-    addInventoryItem as addInventoryItemAction,
-    updateInventoryItem as updateInventoryItemAction
-} from "~/store/inventorySlice";
-import { Check, X, XIcon } from 'lucide-react';
+import { useQuery, useLazyQuery, useMutation } from '@apollo/client/react';
+import { SEARCH_SHOP_PRODUCTS_QUERY, DECREMENT_STOCK_MUTATION } from '~/api/graphql';
+import { Check, X, ChevronLeft, Search, ShoppingCart, Trash2 } from 'lucide-react';
 import { ProductScannerCamera } from '../components';
-import { ChevronLeft } from 'lucide-react';
 
-export default function Checkout({ isOpen, onClose, data }: { isOpen: boolean, onClose: () => void, data?: any }) {
+interface CartItem {
+    id: string;
+    itemName: string;
+    sellingPrice: number;
+    stockQuantity: number;
+    quantity: number;
+    unitOfMeasure?: string;
+}
+
+interface Product {
+    id: string;
+    shopId: string;
+    itemName: string;
+    description?: string;
+    category?: string;
+    unitOfMeasure?: string;
+    photo?: string;
+    sellingPrice: number;
+    stockQuantity: number;
+}
+
+// ScannerTab Component
+function ScannerTab({ shopId, onAddToCart }: {
+    shopId: string | undefined,
+    onAddToCart: (product: Product, quantity: number) => void
+}) {
+    const [scannerStep, setScannerStep] = useState<'camera' | 'search'>('camera');
+    const [scannedProductName, setScannedProductName] = useState('');
+    const [scannedResults, setScannedResults] = useState<Product[]>([]);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [quantity, setQuantity] = useState(1);
+    const [isSearching, setIsSearching] = useState(false);
+    const [showDropdown, setShowDropdown] = useState(false);
 
 
-    const isEdit: boolean = !!data && Object.keys(data).length > 0;
-    const item: any | undefined = data;
+    const [searchScannedProduct, { loading: searchLoading }] = useLazyQuery(SEARCH_SHOP_PRODUCTS_QUERY);
 
-    console.log(data, item)
-    // --- 1. STATES ---
-    const [activeTab, setActiveTab] = useState('manual');
-    const { id: shopId } = useParams();
-    const [photo, setPhoto] = useState<File | null>(null);
-    const [photoPreview, setPhotoPreview] = useState<string>(typeof item?.photo === 'string' ? item.photo : '');
+    // Handle scanner capture
+    const handleScannerCapture = async (file: File, previewUrl: string, matchedName: string, unitOfMeasure: string) => {
+        setScannedProductName(matchedName);
 
-
-
-    const [formData, setFormData] = useState(
-        {
-            itemName: item?.itemName || '',
-            description: item?.description || '',
-            barcode: item?.barcode || '',
-            category: item?.category || '',
-            unitOfMeasure: item?.unitOfMeasure || '',
-            costPrice: item?.costPrice,
-            sellingPrice: item?.sellingPrice,
-            stockQuantity: item?.stockQuantity,
-            reorderLevel: item?.reorderLevel,
-        }
-    );
-
-    useEffect(() => {
-        if (item) {
-            setFormData({
-                itemName: item.itemName || '',
-                description: item.description || '',
-                barcode: item.barcode || '',
-                category: item.category || '',
-                unitOfMeasure: item.unitOfMeasure || '',
-                costPrice: item.costPrice ?? '',
-                sellingPrice: item.sellingPrice ?? '',
-                stockQuantity: item.stockQuantity ?? '',
-                reorderLevel: item.reorderLevel ?? '',
+        // Search for the scanned product
+        if (shopId) {
+            setIsSearching(true);
+            await searchScannedProduct({
+                variables: {
+                    shopId,
+                    query: matchedName,
+                    limit: 10,
+                    offset: 0
+                }
+            }).then((data) => {
+                setIsSearching(false);
+                if (data?.searchShopProducts?.products) {
+                    setScannedResults(data.searchShopProducts.products);
+                    setScannerStep('search');
+                    setShowDropdown(true);
+                }
             });
-
-            if (typeof item.photo === 'string') {
-                setPhotoPreview(item.photo);
-            }
         }
-    }, [item]);
+    };
 
-    console.log(formData.itemName, ';tjhis formadata')
+    const handleSelectProduct = (product: Product) => {
+        setSelectedProduct(product);
+        setShowDropdown(false);
+        setQuantity(1); // Reset quantity when selecting new product
+    };
 
+    const handleAddToCart = () => {
+        if (!selectedProduct) return;
+        onAddToCart(selectedProduct, quantity);
+        setSelectedProduct(null);
+        setScannedProductName('');
+        setQuantity(1);
+        setScannedResults([]);
+        setScannerStep('camera');
+    };
+
+    const handleGoBackToCamera = () => {
+        setScannerStep('camera');
+        setScannedProductName('');
+        setScannedResults([]);
+        setSelectedProduct(null);
+        setShowDropdown(false);
+    };
+
+    return (
+        <div className="flex flex-col flex-1 h-full w-full bg-bg-secondary min-h-0">
+            {scannerStep === 'camera' && (
+                <div className="flex flex-col relative isolate flex-1 w-auto mx-2 rounded-[20px] my-2 overflow-hidden bg-bg-secondary">
+                    <ProductScannerCamera onCaptureComplete={handleScannerCapture} />
+                </div>
+            )}
+
+            {scannerStep === 'search' && (
+                <div className="flex flex-col gap-4 p-5 w-full bg-bg-primary h-full overflow-auto">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-text-sub">
+                            Scanned: "{scannedProductName}"
+                        </h3>
+                        <button
+                            onClick={handleGoBackToCamera}
+                            className="px-3 py-1.5 text-xs bg-bg-secondary border border-border-main text-text-sub rounded-lg hover:bg-item-hover transition-colors"
+                        >
+                            ← Scan Again
+                        </button>
+                    </div>
+
+                    {/* Search Input with Dropdown */}
+                    <div className="relative">
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={selectedProduct?.itemName || scannedProductName}
+                                onFocus={() => setShowDropdown(scannedResults.length > 0)}
+                                readOnly
+                                placeholder="Click to select product..."
+                                onClick={() => setShowDropdown(scannedResults.length > 0 && !selectedProduct)}
+                                className="flex-1 px-4 py-3 border border-border-main rounded-lg text-text-main bg-bg-primary opacity-70 cursor-pointer"
+                            />
+                            {isSearching && (
+                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-brand-gold"></div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Search Results Dropdown */}
+                        {showDropdown && scannedResults.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-bg-secondary border border-border-main rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                {scannedResults.map((product) => (
+                                    <button
+                                        key={product.id}
+                                        onClick={() => handleSelectProduct(product)}
+                                        className="w-full text-left px-4 py-3 hover:bg-item-hover transition-colors border-b border-border-main last:border-b-0"
+                                    >
+                                        <div className="font-medium text-text-main">{product.itemName}</div>
+                                        {product.category && (
+                                            <div className="text-xs text-text-sub mt-1">{product.category}</div>
+                                        )}
+                                        <div className="flex justify-between items-center mt-1">
+                                            <span className="text-sm font-semibold text-brand-gold">
+                                                ₱{product.sellingPrice.toFixed(2)}
+                                            </span>
+                                            <span className="text-xs text-text-sub">
+                                                Stock: {product.stockQuantity}
+                                            </span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {isSearching && (
+                        <div className="flex items-center justify-center py-8">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-gold"></div>
+                            <span className="ml-3 text-text-sub">Searching for "{scannedProductName}"...</span>
+                        </div>
+                    )}
+
+                    {/* Selected Product Details */}
+                    {selectedProduct && (
+                        <div className="border border-border-main rounded-lg p-4 bg-bg-secondary">
+                            <h3 className="font-bold text-text-main mb-3">Selected Product</h3>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                {/* Selling Price (readonly) */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-text-sub mb-1">Selling Price</label>
+                                    <input
+                                        type="text"
+                                        value={`₱${selectedProduct.sellingPrice.toFixed(2)}`}
+                                        readOnly
+                                        className="w-full px-3 py-2 border border-border-main rounded-lg text-text-main bg-bg-primary opacity-70"
+                                    />
+                                </div>
+
+                                {/* Stock Quantity (readonly) */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-text-sub mb-1">Available Stock</label>
+                                    <input
+                                        type="text"
+                                        value={selectedProduct.stockQuantity}
+                                        readOnly
+                                        className="w-full px-3 py-2 border border-border-main rounded-lg text-text-main bg-bg-primary opacity-70"
+                                    />
+                                </div>
+
+                                {/* Unit of Measure (readonly if available) */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-text-sub mb-1">Unit of Measure</label>
+                                    <input
+                                        type="text"
+                                        value={selectedProduct.unitOfMeasure || 'Not specified'}
+                                        readOnly
+                                        className="w-full px-3 py-2 border border-border-main rounded-lg text-text-main bg-bg-primary opacity-70"
+                                    />
+                                </div>
+
+                                {/* Quantity Input */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-text-sub mb-1">Quantity to Buy</label>
+                                    <input
+                                        type="number"
+                                        value={quantity}
+                                        onChange={(e) => {
+                                            const value = parseInt(e.target.value) || 0;
+                                            setQuantity(Math.max(1, Math.min(selectedProduct.stockQuantity, value)));
+                                        }}
+                                        min="1"
+                                        max={selectedProduct.stockQuantity}
+                                        className="w-full px-3 py-2 border border-border-main rounded-lg text-text-main bg-bg-primary focus:outline-none focus:border-brand-gold"
+                                    />
+                                    <div className="text-xs text-text-sub mt-1">
+                                        Max: {selectedProduct.stockQuantity}
+                                    </div>
+                                </div>
+
+                                {/* Subtotal */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-text-sub mb-1">Subtotal</label>
+                                    <input
+                                        type="text"
+                                        value={`₱${(selectedProduct.sellingPrice * quantity).toFixed(2)}`}
+                                        readOnly
+                                        className="w-full px-3 py-2 border border-border-main rounded-lg text-brand-gold font-bold bg-bg-primary opacity-70"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Add to Cart Button */}
+                            <button
+                                onClick={handleAddToCart}
+                                className="w-full mt-4 py-3 bg-brand-gold hover:bg-brand-gold-hover text-white font-semibold rounded-lg transition-colors"
+                            >
+                                Add to Cart
+                            </button>
+                        </div>
+                    )}
+
+                    {/* No Results */}
+                    {!selectedProduct && !isSearching && scannedResults.length === 0 && (
+                        <div className="text-center py-8 text-text-sub">
+                            <p>No products found matching "{scannedProductName}"</p>
+                            <p className="text-sm mt-2">Try scanning again or manually search</p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default function Checkout({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+    const [activeTab, setActiveTab] = useState<'manual' | 'scanner' | 'checkout'>('manual');
+    const { id: shopId } = useParams<{ id: string }>();
+
+    // Cart state
+    const [cart, setCart] = useState<CartItem[]>([]);
+
+    // Modal states
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
 
+    // Checkout mutation
+    const [decrementStock] = useMutation(DECREMENT_STOCK_MUTATION);
 
-    // --- CAMERA & INTERNAL SCANNER STEP TRACKING STATES ---
-    const [scannerStep, setScannerStep] = useState<'camera' | 'form'>('camera');
-    const videoRef = useRef<HTMLVideoElement | null>(null);
-    const [stream, setStream] = useState<MediaStream | null>(null);
-    const [cameraError, setCameraError] = useState<string | null>(null);
+    // Add item to cart
+    const addToCart = (product: Product, quantity: number) => {
+        if (quantity <= 0 || quantity > product.stockQuantity) {
+            openModal({
+                isSuccess: false,
+                message: 'Invalid quantity',
+                error: `Quantity must be between 1 and ${product.stockQuantity}`
+            });
+            return;
+        }
 
+        const existingItem = cart.find(item => item.id === product.id);
 
-    // Clean up all local string variables and close the view
-    const handleCloseInventoryModal = (shoudClose?: boolean) => {
-        setFormData({
-            itemName: '',
-            description: '',
-            barcode: '',
-            category: '',
-            unitOfMeasure: '',
-            costPrice: 0.0,
-            sellingPrice: 0.0,
-            stockQuantity: 0,
-            reorderLevel: undefined,
-        });
-        setPhoto(null);
-        setPhotoPreview('');
-        setScannerStep('camera');
+        if (existingItem) {
+            const newQuantity = existingItem.quantity + quantity;
+            if (newQuantity > product.stockQuantity) {
+                openModal({
+                    isSuccess: false,
+                    message: 'Not enough stock',
+                    error: `Only ${product.stockQuantity} items available`
+                });
+                return;
+            }
 
-        if (shoudClose)
-            onClose();
+            setCart(cart.map(item =>
+                item.id === product.id
+                    ? { ...item, quantity: newQuantity }
+                    : item
+            ));
+        } else {
+            setCart([...cart, {
+                id: product.id,
+                itemName: product.itemName,
+                sellingPrice: product.sellingPrice,
+                stockQuantity: product.stockQuantity,
+                quantity,
+                unitOfMeasure: product.unitOfMeasure
+            }]);
+        }
+
+        openModal({ isSuccess: true, message: 'Item added to cart' });
     };
 
-    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        // 1. Save the actual native File object for the GraphQL mutation
-        setPhoto(file);
-
-        // 2. Optional: Generate a quick, lightweight preview URL for your <img> tag
-        setPhotoPreview(URL.createObjectURL(file));
+    // Remove item from cart
+    const removeFromCart = (productId: string) => {
+        setCart(cart.filter(item => item.id !== productId));
     };
 
-    const handleRemovePhoto = () => {
-        setPhoto(null);
-        setPhotoPreview('');
-    }
-    const dispatch = useDispatch();
+    // Calculate total
+    const calculateTotal = () => {
+        return cart.reduce((total, item) => total + (item.sellingPrice * item.quantity), 0);
+    };
+
+    // Handle checkout/payment
+    const handleCheckout = async () => {
+        if (cart.length === 0) {
+            openModal({ isSuccess: false, message: 'Cart is empty', error: 'Please add items to cart first' });
+            return;
+        }
+
+        try {
+            // Decrement stock for each item
+            for (const item of cart) {
+                await decrementStock({
+                    variables: {
+                        input: {
+                            itemId: item.id,
+                            quantityToRemove: item.quantity
+                        }
+                    }
+                });
+            }
+
+            openModal({ isSuccess: true, message: 'Checkout successful! Stock updated.' });
+
+            // Clear cart after successful checkout
+            setCart([]);
+
+            // Switch to checkout tab to show success
+            setTimeout(() => {
+                onClose();
+            }, 2000);
+        } catch (err: any) {
+            console.error("Checkout failed:", err);
+            openModal({ isSuccess: false, message: 'Checkout failed', error: err.message });
+        }
+    };
+
+    const openModal = ({ isSuccess, message, error }: { isSuccess: boolean, message: string, error?: string }) => {
+        setIsModalOpen(true);
+        setIsSuccess(isSuccess);
+        setModalMessage(message);
+        setErrorMessage(error || '');
+    };
 
     const handleModalClose = () => {
         setIsModalOpen(false);
         setIsSuccess(false);
         setModalMessage('');
+        setErrorMessage('');
     };
 
-    const openModal = ({ isSuccess, type, error }: { isSuccess: boolean, type: string, error?: string }) => {
-
-        if (isSuccess) {
-            if (type === 'add') {
-                setIsModalOpen(true);
-                setIsSuccess(true);
-                setModalMessage('Item created successfully!');
-            } else {
-                setIsModalOpen(true);
-                setIsSuccess(true);
-                setModalMessage('Item updated successfully!');
-            }
-
-        } else {
-            if (type === 'add') {
-                setIsModalOpen(true);
-                setIsSuccess(false);
-                setModalMessage('Failed to create item. Please try again.');
-                setErrorMessage(error || '');
-            } else {
-                setIsModalOpen(true);
-                setIsSuccess(false);
-                setModalMessage('Failed to update item. Please try again.');
-                setErrorMessage(error || '');
-            }
-
-        }
-
-    }
-
-    const [addInventoryItem, { loading: isAddingItem }] = useMutation(ADD_INVENTORY_ITEM_MUTATION, {
-        refetchQueries: ['GetShopInventory'],
-        onCompleted: (data: any) => {
-            // 👇 DISPATCH THE RESPONSE DATA OBJECT DIRECTLY TO REDUX INSTANTLY
-            if (data?.addInventoryItem) {
-                dispatch(addInventoryItemAction(data.addInventoryItem));
-            }
-
-            handleCloseInventoryModal(false);
-            openModal({ isSuccess: true, type: 'add' });
-        },
-        onError: (err) => {
-            console.error("Mutation failed to run:", err);
-            openModal({ isSuccess: false, type: 'add', error: err.message });
-        }
-    });
-
-    const [updateInventoryItem, { loading: isUpdatingItem }] = useMutation(UPDATE_INVENTORY_ITEM_MUTATION, {
-        refetchQueries: ['GetShopInventory'],
-        onCompleted: (data: any) => {
-            // 👇 DISPATCH THE RESPONSE DATA OBJECT DIRECTLY TO REDUX INSTANTLY
-            if (data?.updateInventoryItem) {
-                dispatch(updateInventoryItemAction(data.updateInventoryItem));
-            }
-
-            handleCloseInventoryModal();
-            openModal({ isSuccess: true, type: 'update' });
-        },
-        onError: (err) => {
-            console.error("Mutation failed to run:", err);
-            openModal({ isSuccess: false, type: 'add', error: err.message });
-        }
-    })
-
-    const isLoading = isAddingItem || isUpdatingItem;
-    // Process local submit variables for your backend mutation structure
-    const handleInventoryFormSubmit = async (e: any) => {
-        e.preventDefault();
-
-        console.log('handled')
-
-        const mutationPayload = {
-            itemName: formData.itemName,
-            description: formData.description,
-            barcode: formData.barcode,
-            category: formData.category,
-            unitOfMeasure: formData.unitOfMeasure,
-            costPrice: formData.costPrice,
-            sellingPrice: formData.sellingPrice,
-            stockQuantity: formData.stockQuantity,
-            reorderLevel: formData.reorderLevel,
-            photo: photo || null // 👈 FIXED: Passes down your native browser binary File object stream
-        };
-
-        try {
-            if (isEdit) {
-                // 2. 🟢 EDIT BRANCH REFACTOR: Uses your specialized separate text/file fields
-                const updateInput: any = {
-                    ...mutationPayload,
-                    itemId: item.id, // Reads directly from your dynamic useParams parameter context
-                    photo: photoPreview?.startsWith('http') || photoPreview?.startsWith('res.cloudinary')
-                        ? photoPreview
-                        : "",
-
-                    // 💡 Pass your native browser binary File object stream here as the upload scalar
-                    newPhoto: photo || null
-                    // Pass existing strings back normally (Pass null if cleared out to trigger cleanup!)
-                };
-                updateInventoryItem({
-                    variables: {
-                        input: updateInput
-                    }
-                });
-            } else {
-                await addInventoryItem({
-                    variables: { input: { ...mutationPayload, shopId: shopId } }
-                });
-            }
-            // 👇 EXECUTE APOLLO MUTATION LAYER PIPELINE
-
-        } catch (err) {
-            // Handled cleanly via the useMutation onError lifecycle block callback hooks
-            console.error("Inventory mutation execution block trace catch:", err);
-        }
-    };
-
-
-    const startCamera = async () => {
-        setCameraError(null);
-        try {
-            console.log('starting camera');
-            const mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-            });
-            setStream(mediaStream);
-            if (videoRef.current) {
-                videoRef.current.srcObject = mediaStream;
-            }
-        } catch (err: any) {
-            console.error("Camera access failed:", err);
-            setCameraError(err.message || "Could not access device camera.");
-        }
-    };
-
-    const stopCamera = () => {
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            setStream(null);
-        }
-    };
-
-    // Watch the master activeTab to toggle hardware safely
-    useEffect(() => {
-        if (activeTab === 'scanner' && scannerStep === 'camera') {
-            startCamera();
-        } else {
-            stopCamera();
-        }
-        return () => stopCamera();
-    }, [activeTab, scannerStep]);
-
-    const handleCameraCapture = () => {
-        if (!videoRef.current) return;
-
-        const video = videoRef.current;
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth || 480;
-        canvas.height = video.videoHeight || 640;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        canvas.toBlob((blob) => {
-            if (!blob) return;
-
-            const capturedFile = new File([blob], `scan_${Date.now()}.jpg`, { type: 'image/jpeg' });
-
-            // Lock the image binary file and preview string instantly
-            setPhoto(capturedFile);
-            setPhotoPreview(URL.createObjectURL(capturedFile));
-
-            // Shut off the lens and advance smoothly to Step 2
-            stopCamera();
-            setScannerStep('form');
-            setFormData({ ...formData, itemName: 'name here ' });
-        }, 'image/jpeg', 0.85);
-    };
-
-    const handleGoBackToCamera = () => {
-        setPhoto(null);
-        setPhotoPreview('');
-        setScannerStep('camera');
-    };
-
-
-    // --- 3. RENDERING COMPONENT MARKUP ---
     return (
         <>
             <Modal
                 isOpen={isOpen}
-                onClose={handleCloseInventoryModal}
+                onClose={onClose}
                 isFullScreenModal
-                title={isEdit ? 'Update Item' : 'Add Item to Cart'}
+                title='Checkout'
                 subtitle=''
-                customHeader={<div className={` flex items-center  px-2 py-6 `}>
-                    {/* 💡 Note: layout="position" is safe to leave here, or remove if unneeded */}
-                    <button
-                        onClick={() => { handleCloseInventoryModal(); onClose(); }}
-                        className="p-1.5 text-text-sub hover:text-text-main hover:bg-item-hover z-1 rounded-lg transition-colors cursor-pointer shrink-0"
-                    >
-                        <ChevronLeft size={18} strokeWidth={2.5} />
-                    </button>
-                    <div className="flex-1 flex  min-w-0 pr-4 -ml-4 text-center self-center justify-center">
-                        <h2 className="text-lg font-bold text-text-main  leading-tight truncate">{activeTab === 'manual' ? 'Add Item' : activeTab === 'scanner' ? 'Scan Item' : 'Checkout'}</h2>
+                customHeader={
+                    <div className="flex items-center px-2 py-6">
+                        <button
+                            onClick={onClose}
+                            className="p-1.5 text-text-sub hover:text-text-main hover:bg-item-hover z-1 rounded-lg transition-colors cursor-pointer shrink-0"
+                        >
+                            <ChevronLeft size={18} strokeWidth={2.5} />
+                        </button>
+                        <div className="flex-1 flex min-w-0 pr-4 -ml-4 text-center self-center justify-center">
+                            <h2 className="text-lg font-bold text-text-main leading-tight truncate">
+                                {activeTab === 'manual' ? 'Search Product' : activeTab === 'scanner' ? 'Scan Product' : 'Checkout'}
+                            </h2>
+                        </div>
+                        <div className="relative">
+                            <ShoppingCart size={20} className="text-text-sub" />
+                            {cart.length > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-brand-gold text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                                    {cart.length}
+                                </span>
+                            )}
+                        </div>
                     </div>
-
-                </div>}
+                }
             >
-                {/* HEADER BLOCK for fullscreen modals */}
-
-                <div className="flex flex-col w-full bg-bg-primary flex-1 h-full ">
-
-                    {/* --- TAB HEADERS --- */}
+                <div className="flex flex-col w-full bg-bg-primary flex-1 h-full">
+                    {/* Tab Headers */}
                     <div className='mx-4'>
-                        <div className="flex bg-bg-primary my-2 rounded-full w-full max-w-xl  border border-border-main ">
+                        <div className="flex bg-bg-primary my-2 rounded-full w-full max-w-xl border border-border-main">
                             <button
                                 type="button"
                                 onClick={() => setActiveTab('manual')}
@@ -369,222 +444,102 @@ export default function Checkout({ isOpen, onClose, data }: { isOpen: boolean, o
                                     : 'text-text-sub hover:text-text-main'
                                     }`}
                             >
-                                Checkout
+                                Checkout ({cart.length})
                             </button>
                         </div>
                     </div>
 
-                    {/* --- INVENTORY CONTAINER DATA MATRIX --- */}
-                    <div className="w-full bg-bg-primary h-full flex-1 flex">
-                        {activeTab === 'manual' ? (
-                            <form onSubmit={handleInventoryFormSubmit} className="flex flex-col gap-5 md:p-6 p-5 w-full">
+                    {/* Tab Content */}
+                    <div className="w-full bg-bg-primary h-full flex-1 flex overflow-auto">
+                        {/* MANUAL SEARCH TAB */}
+                        {activeTab === 'manual' && (
+                            <ManualSearchTab
+                                shopId={shopId}
+                                onAddToCart={addToCart}
+                            />
+                        )}
 
-                                {/* Item Name Input */}
-                                <div className="flex flex-col gap-2 text-left">
-                                    <label className="text-xs font-semibold text-[var(--color-text-sub)]">Item Name *</label>
-                                    <input
-                                        type="text"
-                                        value={formData.itemName}
-                                        onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
-                                        className="w-full px-3 py-2 border border-[var(--color-border-main)] rounded-lg text-[var(--color-text-main)] bg-[var(--color-bg-primary)] focus:outline-none focus:border-border-muted"
-                                        placeholder="e.g. Organic Milk"
-                                        required
-                                    />
-                                </div>
+                        {/* AI SCANNER TAB */}
+                        {activeTab === 'scanner' && (
+                            <ScannerTab
+                                shopId={shopId}
+                                onAddToCart={addToCart}
+                            />
+                        )}
 
-                                {/* Financial Estimates Metrics Layout Row */}
-                                <div className="grid grid-cols-1 gap-4">
-                                    <div className="flex flex-col gap-1 text-left">
-                                        <label className="text-xs font-semibold text-[var(--color-text-sub)]">Cost Price</label>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            value={formData.costPrice}
-                                            onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
-                                            className="w-full px-3 py-2 border border-[var(--color-border-main)] rounded-lg text-[var(--color-text-main)] bg-[var(--color-bg-primary)] focus:outline-none  focus:border-border-muted"
-                                            placeholder="0.00"
-                                        />
+                        {/* CHECKOUT TAB */}
+                        {activeTab === 'checkout' && (
+                            <div className="flex flex-col gap-4 p-5 w-full h-full">
+                                {cart.length === 0 ? (
+                                    <div className="flex-1 flex items-center justify-center text-text-sub">
+                                        <div className="text-center">
+                                            <ShoppingCart size={48} className="mx-auto mb-4 opacity-50" />
+                                            <p>Your cart is empty</p>
+                                            <p className="text-sm mt-2">Add items using Manual Input or AI Scanner</p>
+                                        </div>
                                     </div>
-                                    <div className="flex flex-col gap-1 text-left">
-                                        <label className="text-xs font-semibold text-[var(--color-text-sub)]">Selling Price</label>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            value={formData.sellingPrice}
-                                            onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
-                                            className="w-full px-3 py-2 border border-[var(--color-border-main)] rounded-lg text-[var(--color-text-main)] bg-[var(--color-bg-primary)] focus:outline-none focus:border-border-muted"
-                                            placeholder="0.00"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Quantities Operational Inventory Controls Row */}
-                                <div className="grid grid-cols-1 gap-4 items-end">
-                                    <div className="flex flex-col gap-1 text-left">
-                                        <label className="text-xs font-semibold text-[var(--color-text-sub)]">Stock Quantity</label>
-                                        <input
-                                            type="number"
-                                            value={formData.stockQuantity}
-                                            onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
-                                            className="w-full px-3 py-2 border border-[var(--color-border-main)] rounded-lg text-[var(--color-text-main)] bg-[var(--color-bg-primary)] focus:outline-none focus:border-border-muted"
-                                            placeholder="0"
-                                        />
-                                    </div>
-                                    <div className="flex flex-col gap-1 text-left">
-                                        <label className="text-xs font-semibold text-[var(--color-text-sub)]">Unit of Measure (1g,1kg, 12pcs etc)</label>
-                                        <input
-                                            type="text"
-                                            value={formData.unitOfMeasure}
-                                            onChange={(e) => setFormData({ ...formData, unitOfMeasure: e.target.value })}
-                                            className="w-full px-3 py-2 border border-[var(--color-border-main)] rounded-lg text-[var(--color-text-main)] bg-[var(--color-bg-primary)] focus:outline-none focus:border-border-muted"
-                                            placeholder="1g, 1kg, 12pcs etc"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Bottom Window Choice Action Items */}
-                                <div className="flex justify-center w-full  gap-3 mt-auto">
-
-                                    <button
-                                        type="submit"
-                                        disabled={isLoading}
-                                        className="px-6 py-3 justify-center font-semibold w-full text-center bg-brand-gold hover:bg-brand-gold-hover text-text-white cursor-pointer rounded-xl hover:bg- disabled:bg-zinc-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                                    >
-                                        {isLoading ? (
-                                            <>
-                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                                <span>{isEdit ? 'Updating...' : 'Adding...'}</span>
-                                            </>
-                                        ) : (
-                                            <span>{isEdit ? 'Update Item' : 'Add Item to Cart'}</span>
-                                        )}
-                                    </button>
-                                </div>
-
-                            </form>
-                        ) : activeTab === 'scanner' && (
-                            /* --- DISPATCH SCANNER HARDWARE SLOT --- */
-                            <div className="flex flex-col flex-1 h-full w-full bg-[var(--color-bg-secondary)] min-h-0 md:min-h-[521px]">
-
-                                {scannerStep === 'camera' && (
-                                    <div className="flex flex-col relative isolate flex-1 w-auto mx-2 rounded-[20px] my-2 overflow-hidden bg-[var(--color-bg-secondary)] ">
-                                        <ProductScannerCamera
-                                            onCaptureComplete={(file, previewUrl, matchedName, unitOfMeasure) => {
-                                                setPhoto(file);
-                                                setPhotoPreview(previewUrl);
-                                                setFormData({
-                                                    ...formData,
-                                                    unitOfMeasure: unitOfMeasure,
-                                                    itemName: matchedName,
-                                                });
-
-                                                setScannerStep('form');
-                                            }}
-                                        />
-                                    </div>
-
-                                )}
-
-                                {scannerStep === 'form' && (
-                                    <form onSubmit={handleInventoryFormSubmit} className="flex flex-col h-full gap-5 md:p-6 p-5 w-full bg-[var(--color-bg-primary)]">
-                                        {/* Item Name Input */}
-                                        <div className="flex flex-col gap-2 text-left">
-                                            <label className="text-xs font-semibold text-[var(--color-text-sub)]">Item Name *</label>
-                                            <input
-                                                type="text"
-                                                value={formData.itemName}
-                                                onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
-                                                className="w-full px-3 py-2 border border-[var(--color-border-main)] rounded-lg text-[var(--color-text-main)] bg-[var(--color-bg-primary)] focus:outline-none focus:border-border-muted"
-                                                placeholder="e.g. Organic Milk"
-                                                required
-                                            />
+                                ) : (
+                                    <>
+                                        <div className="flex-1 flex flex-col gap-3 overflow-auto">
+                                            <h3 className="text-sm font-semibold text-text-sub">Cart Items</h3>
+                                            {cart.map((item) => (
+                                                <div key={item.id} className="border border-border-main rounded-lg p-4 bg-bg-secondary">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div>
+                                                            <h4 className="font-semibold text-text-main">{item.itemName}</h4>
+                                                            {item.unitOfMeasure && (
+                                                                <p className="text-xs text-text-sub">{item.unitOfMeasure}</p>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => removeFromCart(item.id)}
+                                                            className="p-1.5 hover:bg-item-hover rounded-lg text-text-sub hover:text-brand-red transition-colors"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="text-sm">
+                                                            <span className="text-text-sub mr-2">Quantity:</span>
+                                                            <span className="font-semibold">{item.quantity}</span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-brand-gold font-bold">
+                                                                ₱{(item.sellingPrice * item.quantity).toFixed(2)}
+                                                            </div>
+                                                            <div className="text-xs text-text-sub">
+                                                                ₱{item.sellingPrice.toFixed(2)} each
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
 
-                                        {/* Financial Estimates Metrics Layout Row */}
-                                        <div className="grid grid-cols-1 gap-4">
-
-                                            <div className="flex flex-col gap-1 text-left">
-                                                <label className="text-xs font-semibold text-[var(--color-text-sub)]">Selling Price</label>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={formData.sellingPrice}
-                                                    onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-[var(--color-border-main)] rounded-lg text-[var(--color-text-main)] bg-[var(--color-bg-primary)] focus:outline-none focus:border-border-muted"
-                                                    placeholder="0.00"
-                                                />
+                                        {/* Total and Checkout Button */}
+                                        <div className="border-t border-border-main pt-4 mt-auto">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <span className="text-lg font-bold text-text-main">Total:</span>
+                                                <span className="text-2xl font-bold text-brand-gold">
+                                                    ₱{calculateTotal().toFixed(2)}
+                                                </span>
                                             </div>
+                                            <button
+                                                onClick={handleCheckout}
+                                                className="w-full py-3 bg-brand-gold hover:bg-brand-gold-hover text-white font-semibold rounded-lg transition-colors"
+                                            >
+                                                Proceed to Payment
+                                            </button>
                                         </div>
-
-                                        {/* Quantities Operational Inventory Controls Row */}
-                                        <div className="grid grid-cols-1 gap-4">
-                                            <div className="flex flex-col gap-1 text-left">
-                                                <label className="text-xs font-semibold text-[var(--color-text-sub)]">Stock Quantity</label>
-                                                <input
-                                                    type="number"
-                                                    value={formData.stockQuantity}
-                                                    onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-[var(--color-border-main)] rounded-lg text-[var(--color-text-main)] bg-[var(--color-bg-primary)] focus:outline-none focus:border-border-muted"
-                                                    placeholder="0"
-                                                />
-                                            </div>
-                                            <div className="flex flex-col gap-1 text-left">
-                                                <label className="text-xs font-semibold text-[var(--color-text-sub)]">Unit of Measure (1g,1kg, 12pcs etc)</label>
-                                                <input
-                                                    type="text"
-                                                    value={formData.unitOfMeasure}
-                                                    onChange={(e) => setFormData({ ...formData, unitOfMeasure: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-[var(--color-border-main)] rounded-lg text-[var(--color-text-main)] bg-[var(--color-bg-primary)] focus:outline-none focus:border-border-muted"
-                                                    placeholder="1g, 1kg, 12pcs etc"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Pre-Populated Snapshot Render Canvas Preview Container */}
-                                        <div className="flex flex-col gap-1 text-left w-full">
-                                            <label className="text-xs font-semibold text-[var(--color-text-sub)]">Captured Scanner Snapshot</label>
-                                            <div className="relative w-full h-48 border border-[var(--color-border-main)] rounded-lg bg-[var(--color-bg-secondary)] overflow-hidden flex items-center justify-center">
-                                                <img src={photoPreview || ''} alt="Product preview grid reference" className="h-full object-contain" />
-                                            </div>
-                                        </div>
-
-                                        {/* Bottom Window Choice Action Items */}
-                                        <div className="flex justify-between items-center mt-auto">
-                                            {/* Go Back Left Anchor: Re-triggers camera tab frame loops */}
-
-
-                                            <div className="flex gap-3 w-full">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleGoBackToCamera}
-                                                    className="px-2 md:px-4  py-2 md:w-[200px] w-[150px] bg-[var(--color-bg-primary-hover)] border border-[var(--color-border-main)] text-[var(--color-text-sub)] rounded-xl font-bold text-xs md:text-sm cursor-pointer hover:bg-[var(--color-border-main)] transition-colors"
-                                                >
-                                                    ← Go Back to Camera
-                                                </button>
-                                                <button
-                                                    type="submit"
-                                                    disabled={isLoading}
-                                                    className="px-6 py-3 text-sm md:text-sm align-center justify-center font-semibold flex-1 w-full flex bg-brand-gold hover:bg-brand-gold-hover text-text-white cursor-pointer rounded-xl disabled:bg-zinc-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                                                >
-                                                    {isLoading ? (
-                                                        <>
-                                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                                            <span>Adding Item...</span>
-                                                        </>
-                                                    ) : (
-                                                        <span>Add Item to cart</span>
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </form>
+                                    </>
                                 )}
                             </div>
                         )}
                     </div>
-
                 </div>
             </Modal>
+
+            {/* Success/Error Modal */}
             <Modal
                 isOpen={isModalOpen}
                 onClose={handleModalClose}
@@ -597,35 +552,230 @@ export default function Checkout({ isOpen, onClose, data }: { isOpen: boolean, o
                 unsetHeight
             >
                 <div className="flex flex-col items-center justify-center p-6 min-h-[200px]">
-                    {/* Visual Success/Error Indicator Anchor (Optional styling) */}
-                    <div className=''>
+                    <div>
                         {isSuccess ? (
                             <Check className="w-8 h-8 text-brand-gold" />
                         ) : (
                             <X className="w-8 h-8 text-brand-red" />
                         )}
                     </div>
-
-                    {/* Dynamic Text Content */}
-                    <p className="mt-2 text-lg font-bold text-text-main dark:text-zinc-400">
-                        {modalMessage}
-                    </p>
-
-                    <p className={`mt-2 ${isSuccess ? 'hidden' : ''} text-sm text-text-main dark:text-zinc-400`}>
-                        {errorMessage}
-                    </p>
-
-                    {/* Confirmation Button to trigger close function */}
+                    <p className="mt-2 text-lg font-bold text-text-main">{modalMessage}</p>
+                    {errorMessage && (
+                        <p className="mt-2 text-sm text-text-sub">{errorMessage}</p>
+                    )}
                     <button
                         onClick={handleModalClose}
-                        className='mt-6 p-2 px-4 bg-brand-gold hover:bg-brand-gold-hover cursor-pointer text-text-white rounded-lg  transition-colors'
+                        className='mt-6 p-2 px-4 bg-brand-gold hover:bg-brand-gold-hover cursor-pointer text-text-white rounded-lg transition-colors'
                     >
                         OK
                     </button>
                 </div>
             </Modal>
-
         </>
+    );
+}
 
+// ManualSearchTab Component
+function ManualSearchTab({ shopId, onAddToCart }: {
+    shopId: string | undefined,
+    onAddToCart: (product: Product, quantity: number) => void
+}) {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<Product[]>([]);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [quantity, setQuantity] = useState(1);
+    const [isSearching, setIsSearching] = useState(false);
+    const [showDropdown, setShowDropdown] = useState(false);
+
+    const [searchProducts, { loading: searchLoading }] = useLazyQuery(SEARCH_SHOP_PRODUCTS_QUERY);
+
+    const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const query = e.target.value;
+        setSearchQuery(query);
+
+        if (query.length >= 2 && shopId) {
+            setIsSearching(true);
+            searchProducts({
+                variables: {
+                    shopId,
+                    query: query,
+                    limit: 10,
+                    offset: 0
+                }
+            }).then((data) => {
+                setIsSearching(false);
+                if (data?.searchShopProducts?.products) {
+                    setSearchResults(data.searchShopProducts.products);
+                    setShowDropdown(true);
+                }
+            });
+        } else {
+            setSearchResults([]);
+            setShowDropdown(false);
+        }
+    };
+
+    const handleSelectProduct = (product: Product) => {
+        setSelectedProduct(product);
+        setSearchQuery(product.itemName);
+        setShowDropdown(false);
+        setQuantity(1); // Reset quantity when selecting new product
+    };
+
+    const handleAddToCart = () => {
+        if (!selectedProduct) return;
+        onAddToCart(selectedProduct, quantity);
+        setSelectedProduct(null);
+        setSearchQuery('');
+        setQuantity(1);
+        setSearchResults([]);
+    };
+
+    return (
+        <div className="flex flex-col gap-4 p-5 w-full">
+            {/* Search Input with Dropdown */}
+            <div className="relative">
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={handleSearch}
+                        onFocus={() => setShowDropdown(searchResults.length > 0)}
+                        placeholder="Search product by name..."
+                        className="flex-1 px-4 py-3 border border-border-main rounded-lg text-text-main bg-bg-primary focus:outline-none focus:border-brand-gold"
+                    />
+                    {isSearching && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-brand-gold"></div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Search Results Dropdown */}
+                {showDropdown && searchResults.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-bg-secondary border border-border-main rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        {searchResults.map((product) => (
+                            <button
+                                key={product.id}
+                                onClick={() => handleSelectProduct(product)}
+                                className="w-full text-left px-4 py-3 hover:bg-item-hover transition-colors border-b border-border-main last:border-b-0"
+                            >
+                                <div className="font-medium text-text-main">{product.itemName}</div>
+                                {product.category && (
+                                    <div className="text-xs text-text-sub mt-1">{product.category}</div>
+                                )}
+                                <div className="flex justify-between items-center mt-1">
+                                    <span className="text-sm font-semibold text-brand-gold">
+                                        ₱{product.sellingPrice.toFixed(2)}
+                                    </span>
+                                    <span className="text-xs text-text-sub">
+                                        Stock: {product.stockQuantity}
+                                    </span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Selected Product Details */}
+            {selectedProduct && (
+                <div className="border border-border-main rounded-lg p-4 bg-bg-secondary">
+                    <h3 className="font-bold text-text-main mb-3">Selected Product</h3>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        {/* Item Name (readonly) */}
+                        <div className="col-span-2">
+                            <label className="block text-xs font-semibold text-text-sub mb-1">Item Name</label>
+                            <input
+                                type="text"
+                                value={selectedProduct.itemName}
+                                readOnly
+                                className="w-full px-3 py-2 border border-border-main rounded-lg text-text-main bg-bg-primary opacity-70"
+                            />
+                        </div>
+
+                        {/* Selling Price (readonly) */}
+                        <div>
+                            <label className="block text-xs font-semibold text-text-sub mb-1">Selling Price</label>
+                            <input
+                                type="text"
+                                value={`₱${selectedProduct.sellingPrice.toFixed(2)}`}
+                                readOnly
+                                className="w-full px-3 py-2 border border-border-main rounded-lg text-text-main bg-bg-primary opacity-70"
+                            />
+                        </div>
+
+                        {/* Stock Quantity (readonly) */}
+                        <div>
+                            <label className="block text-xs font-semibold text-text-sub mb-1">Available Stock</label>
+                            <input
+                                type="text"
+                                value={selectedProduct.stockQuantity}
+                                readOnly
+                                className="w-full px-3 py-2 border border-border-main rounded-lg text-text-main bg-bg-primary opacity-70"
+                            />
+                        </div>
+
+                        {/* Unit of Measure (readonly if available) */}
+                        <div>
+                            <label className="block text-xs font-semibold text-text-sub mb-1">Unit of Measure</label>
+                            <input
+                                type="text"
+                                value={selectedProduct.unitOfMeasure || 'Not specified'}
+                                readOnly
+                                className="w-full px-3 py-2 border border-border-main rounded-lg text-text-main bg-bg-primary opacity-70"
+                            />
+                        </div>
+
+                        {/* Quantity Input */}
+                        <div>
+                            <label className="block text-xs font-semibold text-text-sub mb-1">Quantity to Buy</label>
+                            <input
+                                type="number"
+                                value={quantity}
+                                onChange={(e) => {
+                                    const value = parseInt(e.target.value) || 0;
+                                    setQuantity(Math.max(1, Math.min(selectedProduct.stockQuantity, value)));
+                                }}
+                                min="1"
+                                max={selectedProduct.stockQuantity}
+                                className="w-full px-3 py-2 border border-border-main rounded-lg text-text-main bg-bg-primary focus:outline-none focus:border-brand-gold"
+                            />
+                            <div className="text-xs text-text-sub mt-1">
+                                Max: {selectedProduct.stockQuantity}
+                            </div>
+                        </div>
+
+                        {/* Subtotal */}
+                        <div>
+                            <label className="block text-xs font-semibold text-text-sub mb-1">Subtotal</label>
+                            <input
+                                type="text"
+                                value={`₱${(selectedProduct.sellingPrice * quantity).toFixed(2)}`}
+                                readOnly
+                                className="w-full px-3 py-2 border border-border-main rounded-lg text-brand-gold font-bold bg-bg-primary opacity-70"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Add to Cart Button */}
+                    <button
+                        onClick={handleAddToCart}
+                        className="w-full mt-4 py-3 bg-brand-gold hover:bg-brand-gold-hover text-white font-semibold rounded-lg transition-colors"
+                    >
+                        Add to Cart
+                    </button>
+                </div>
+            )}
+
+            {/* Instructions */}
+            {!selectedProduct && !isSearching && (
+                <div className="text-center py-8 text-text-sub text-sm">
+                    <p>Type at least 2 characters to search products</p>
+                    <p className="mt-1">Select a product from dropdown to add to cart</p>
+                </div>
+            )}
+        </div>
     );
 }
