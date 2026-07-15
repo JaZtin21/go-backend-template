@@ -1341,3 +1341,68 @@ func (r *queryResolver) SearchProduct(ctx context.Context, query string, limit i
 		HasNextPage: hasNextPage,
 	}, nil
 }
+
+// SearchShopProducts is the resolver for the searchShopProducts field.
+func (r *queryResolver) SearchShopProducts(ctx context.Context, shopID string, query string, limit int, offset int) (*model.PaginatedPublicProducts, error) {
+	// 1. Get total items matching item name or category string within a specific shop
+	var totalCount int64
+	countQuery := "SELECT COUNT(*) FROM inventory_items WHERE shop_id = $1 AND (item_name ILIKE $2 OR category ILIKE $2)"
+	searchPattern := "%" + query + "%"
+
+	err := r.Resolver.DB.QueryRow(ctx, countQuery, shopID, searchPattern).Scan(&totalCount)
+	if err != nil {
+		graphql.AddError(ctx, &gqlerror.Error{
+			Message:    "internal server error: shop product search count failure",
+			Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
+		})
+		return nil, nil
+	}
+
+	// 2. Fetch public fields only from the specific shop. cost_price and reorder_level are completely skipped.
+	selectQuery := `
+		SELECT id, shop_id, item_name, description, category, unit_of_measure, photo, selling_price, stock_quantity
+		FROM inventory_items 
+		WHERE shop_id = $1 AND (item_name ILIKE $2 OR category ILIKE $2)
+		ORDER BY item_name ASC 
+		LIMIT $3 OFFSET $4
+	`
+	rows, err := r.Resolver.DB.Query(ctx, selectQuery, shopID, searchPattern, limit, offset)
+	if err != nil {
+		graphql.AddError(ctx, &gqlerror.Error{
+			Message:    "internal server error: shop product collection search failure",
+			Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
+		})
+		return nil, nil
+	}
+	defer rows.Close()
+
+	var products []*model.PublicProduct
+	for rows.Next() {
+		var prod model.PublicProduct
+
+		err := rows.Scan(
+			&prod.ID, &prod.ShopID, &prod.ItemName, &prod.Description,
+			&prod.Category, &prod.UnitOfMeasure, &prod.Photo, &prod.SellingPrice, &prod.StockQuantity,
+		)
+		if err != nil {
+			graphql.AddError(ctx, &gqlerror.Error{
+				Message:    "internal server error: shop item decoding failure",
+				Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
+			})
+			return nil, nil
+		}
+		products = append(products, &prod)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	hasNextPage := int64(offset+limit) < totalCount
+
+	return &model.PaginatedPublicProducts{
+		Products:    products,
+		TotalCount:  int(totalCount),
+		HasNextPage: hasNextPage,
+	}, nil
+}

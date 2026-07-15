@@ -353,3 +353,23 @@ export const SEARCH_PRODUCT_QUERY = gql`
     }
   }
 `;
+
+export const SEARCH_SHOP_PRODUCTS_QUERY = gql`
+  query SearchShopProducts($shopId: ID!, $query: String!, $limit: Int!, $offset: Int!) {
+    searchShopProducts(shopId: $shopId, query: $query, limit: $limit, offset: $offset) {
+      totalCount
+      hasNextPage
+      products {
+        id
+        shopId
+        itemName
+        description
+        category
+        unitOfMeasure
+        photo
+        sellingPrice
+        stockQuantity
+      }
+    }
+  }
+`;

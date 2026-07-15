@@ -179,15 +179,16 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		GetMyShops       func(childComplexity int, limit int, offset int) int
-		GetPostByID      func(childComplexity int, id string) int
-		GetPosts         func(childComplexity int, limit int, offset int) int
-		GetShopByID      func(childComplexity int, shopID string) int
-		GetShopInventory func(childComplexity int, shopID string, limit int, offset int) int
-		Me               func(childComplexity int) int
-		Ping             func(childComplexity int) int
-		SearchProduct    func(childComplexity int, query string, limit int, offset int) int
-		SearchShop       func(childComplexity int, query string, limit int, offset int) int
+		GetMyShops         func(childComplexity int, limit int, offset int) int
+		GetPostByID        func(childComplexity int, id string) int
+		GetPosts           func(childComplexity int, limit int, offset int) int
+		GetShopByID        func(childComplexity int, shopID string) int
+		GetShopInventory   func(childComplexity int, shopID string, limit int, offset int) int
+		Me                 func(childComplexity int) int
+		Ping               func(childComplexity int) int
+		SearchProduct      func(childComplexity int, query string, limit int, offset int) int
+		SearchShop         func(childComplexity int, query string, limit int, offset int) int
+		SearchShopProducts func(childComplexity int, shopID string, query string, limit int, offset int) int
 	}
 
 	RefreshResponse struct {
@@ -278,6 +279,7 @@ type QueryResolver interface {
 	GetShopInventory(ctx context.Context, shopID string, limit int, offset int) (*model.PaginatedOwnerInventory, error)
 	SearchShop(ctx context.Context, query string, limit int, offset int) (*model.PaginatedShops, error)
 	SearchProduct(ctx context.Context, query string, limit int, offset int) (*model.PaginatedPublicProducts, error)
+	SearchShopProducts(ctx context.Context, shopID string, query string, limit int, offset int) (*model.PaginatedPublicProducts, error)
 	Me(ctx context.Context) (*model.User, error)
 }
 
@@ -1017,6 +1019,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SearchShop(childComplexity, args["query"].(string), args["limit"].(int), args["offset"].(int)), true
+	case "Query.searchShopProducts":
+		if e.ComplexityRoot.Query.SearchShopProducts == nil {
+			break
+		}
+
+		args, err := ec.field_Query_searchShopProducts_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SearchShopProducts(childComplexity, args["shopId"].(string), args["query"].(string), args["limit"].(int), args["offset"].(int)), true
 
 	case "RefreshResponse.accessToken":
 		if e.ComplexityRoot.RefreshResponse.AccessToken == nil {
@@ -2152,6 +2165,44 @@ func (ec *executionContext) field_Query_searchProduct_args(ctx context.Context, 
 		return nil, err
 	}
 	args["offset"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_searchShopProducts_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "shopId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["shopId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "query",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["query"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg3
 	return args, nil
 }
 
@@ -5273,6 +5324,50 @@ func (ec *executionContext) fieldContext_Query_searchProduct(ctx context.Context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_searchProduct_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_searchShopProducts(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_searchShopProducts(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SearchShopProducts(ctx, fc.Args["shopId"].(string), fc.Args["query"].(string), fc.Args["limit"].(int), fc.Args["offset"].(int))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.PaginatedPublicProducts) graphql.Marshaler {
+			return ec.marshalNPaginatedPublicProducts2ᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐPaginatedPublicProducts(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_searchShopProducts(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_PaginatedPublicProducts(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_searchShopProducts_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -9479,6 +9574,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_searchProduct(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "searchShopProducts":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_searchShopProducts(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
