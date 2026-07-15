@@ -369,7 +369,7 @@ export function ScannerTab({ shopId, updateCart }: ScannerTabProps) {
                                         disabled={!selectedProduct || selectedProduct.stockQuantity === 0}
                                         min={selectedProduct?.stockQuantity === 0 ? 0 : 1}
                                         max={selectedProduct?.stockQuantity || 0}
-                                        className="w-full px-4 py-2 font-semibold border border-border-main rounded-lg bg-bg-primary text-text-main focus:outline-none focus:border-brand-gold disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        className="w-full px-4 py-2  border border-border-main rounded-lg bg-bg-primary text-text-main focus:outline-none focus:border-brand-gold disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                     <button type="button" onClick={decrementQty} disabled={Number(quantity) <= 1} className="p-2 h-full cursor-pointer border border-border-main rounded-lg hover:bg-item-hover disabled:opacity-50 transition-colors text-text-main" >
                                         <Minus size={16} />
@@ -390,7 +390,7 @@ export function ScannerTab({ shopId, updateCart }: ScannerTabProps) {
                     {
                         selectedProduct && (
                             <>
-                                <div className="flex flex-col gap-1">
+                                <div className="flex flex-col mt-auto gap-1">
                                     <label className="block text-xs font-semibold text-text-sub">Subtotal</label>
                                     <input type="text" value={`₱${(selectedProduct.sellingPrice * Number(quantity)).toFixed(2)}`} readOnly className="w-full px-3 py-2 border border-border-main rounded-lg text-brand-gold font-bold bg-bg-primary opacity-70" />
                                 </div>

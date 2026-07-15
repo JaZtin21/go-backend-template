@@ -88,83 +88,90 @@ export const CheckoutTab = ({ shopId, updateCart }: ManualSearchTabProps) => {
             openModal({ isSuccess: false, message: 'Checkout failed', error: err.message });
         }
     };
-
     return (
-        <div className="flex flex-col gap-4  w-full h-full">
-            {cart.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center text-text-sub">
-                    <div className="text-center">
-                        <ShoppingCart size={48} className="mx-auto mb-4 opacity-50" />
-                        <p>Your cart is empty</p>
-                        <p className="text-sm mt-2">Add items using Manual Input or AI Scanner</p>
-                    </div>
-                </div>
-            ) : (
-                <>
-                    <div className="flex-1 flex flex-col gap-3 overflow-auto">
-                        <h3 className="text-sm font-semibold text-text-sub">Cart Items</h3>
-                        {cart.map((item) => {
-                            // 🚀 CLEAN DESTRUCTURING: pull the nested child product values directly into local variables loop context
-                            const product = item.product;
-                            if (!product) return null; // Safety boundary fallback defusal check
+        // 🚀 Absolute-boundary tracking container parent enforces strict layout clipping bounds
+        <div className="absolute inset-0 flex flex-col w-full h-full p-0 m-0 overflow-hidden min-h-0 ">
 
-                            return (
-                                <div key={product.id} className="border border-border-main rounded-lg p-4 bg-bg-secondary">
-                                    <div className="flex gap-3">
-                                        {product.photo ? (
-                                            <img src={product.photo} alt={product.itemName} className="w-14 h-14 object-cover rounded-lg" />
-                                        ) : (
-                                            <div className="w-14 h-14 bg-item-hover rounded-lg flex items-center justify-center">
-                                                <ImageIcon size={20} className="text-text-sub" />
-                                            </div>
-                                        )}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start mb-1">
-                                                <h4 className="font-semibold text-text-main">{product.itemName}</h4>
-                                                <button onClick={() => removeFromCart(product.id)} className="p-1.5 hover:bg-item-hover rounded-lg text-text-sub hover:text-brand-red transition-colors cursor-pointer" >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                            {product.unitOfMeasure && (
-                                                <p className="text-xs text-text-sub mb-2">{product.unitOfMeasure}</p>
-                                            )}
-                                            <div className="flex justify-between items-center">
-                                                <div className="text-sm">
-                                                    <span className="text-text-sub mr-2">Quantity:</span>
-                                                    <span className="font-semibold text-text-main">{item.quantity}</span>
+            {/* View Frame layer containing inner horizontal inset margin constraints alignment parameters */}
+            <div className="flex-1 w-full h-full  relative flex flex-col min-h-0 overflow-hidden">
+                {cart.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center text-text-sub">
+                        <div className="text-center">
+                            <ShoppingCart size={48} className="mx-auto mb-4 opacity-50" />
+                            <p>Your cart is empty</p>
+                            <p className="text-sm mt-2">Add items using Manual Input or AI Scanner</p>
+                        </div>
+                    </div>
+                ) : (
+                    // Structural height container
+                    <div className="flex-1 flex flex-col min-h-0 w-full relative px-5  pt-3">
+
+                        {/* 🚀 INDEPENDENT SCROLL REGION: Absorbs scroll actions perfectly and preserves bottom margin guards */}
+                        <div className="flex-1 overflow-y-auto bg-bg-primary min-h-0 flex flex-col gap-3 pb-38 pr-1 ">
+                            {/* 🚀 FIXED: Dropped all sticky classes so it rests naturally inside the list scroll stream block flow */}
+                            <h3 className="text-sm font-semibold text-text-sub ">Cart Items</h3>
+                            {cart.map((item) => {
+                                const product = item.product;
+                                if (!product) return null;
+
+                                return (
+                                    <div key={product.id} className="border border-border-main rounded-lg p-4 bg-bg-primary flex-shrink-0">
+                                        <div className="flex gap-3">
+                                            {product.photo ? (
+                                                <img src={product.photo} alt={product.itemName} className="w-14 h-14 object-cover rounded-lg" />
+                                            ) : (
+                                                <div className="w-14 h-14 bg-item-hover rounded-lg flex items-center justify-center">
+                                                    <ImageIcon size={20} className="text-text-sub" />
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="text-brand-gold font-bold">
-                                                        ₱{(product.sellingPrice * item.quantity).toFixed(2)}
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <h4 className="font-semibold text-text-main">{product.itemName}</h4>
+                                                    <button onClick={() => removeFromCart(product.id)} className="p-1.5 hover:bg-item-hover rounded-lg text-text-sub hover:text-brand-red transition-colors cursor-pointer" >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                                {product.unitOfMeasure && (
+                                                    <p className="text-xs text-text-sub mb-2">{product.unitOfMeasure}</p>
+                                                )}
+                                                <div className="flex justify-between items-center">
+                                                    <div className="text-sm">
+                                                        <span className="text-text-sub mr-2">Quantity:</span>
+                                                        <span className="font-semibold text-text-main">{item.quantity}</span>
                                                     </div>
-                                                    <div className="text-xs text-text-sub">
-                                                        ₱{product.sellingPrice.toFixed(2)} each
+                                                    <div className="text-right">
+                                                        <div className="text-brand-gold font-bold">
+                                                            ₱{(product.sellingPrice * item.quantity).toFixed(2)}
+                                                        </div>
+                                                        <div className="text-xs text-text-sub">
+                                                            ₱{product.sellingPrice.toFixed(2)} each
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {/* Total and Checkout Button */}
-                    <div className="border-t border-border-main pt-4 mt-auto">
-                        <div className="flex justify-between items-center mb-4">
-                            <span className="text-lg font-bold text-text-main">Total:</span>
-                            <span className="text-2xl font-bold text-brand-gold">
-                                ₱{calculateTotal().toFixed(2)}
-                            </span>
+                                );
+                            })}
                         </div>
-                        <button onClick={handleCheckout} className="w-full py-3 bg-brand-gold hover:bg-brand-gold-hover text-white font-semibold rounded-lg transition-colors cursor-pointer" >
-                            Proceed to Payment
-                        </button>
-                    </div>
-                </>
-            )}
 
-            {/* Success/Error Modal */}
+                        {/* FIXED FOOTER OVERLAY PANEL: Locked down layout base configuration layer shadow grid accents */}
+                        <div className="absolute bottom-0 left-0  pt-4 px-5 pb-6 w-full bg-bg-primary z-20 ">
+                            <div className="flex justify-between items-center mb-4">
+                                <span className="text-lg font-bold text-text-main">Total:</span>
+                                <span className="text-2xl font-bold text-brand-gold">
+                                    ₱{calculateTotal().toFixed(2)}
+                                </span>
+                            </div>
+                            <button onClick={handleCheckout} className="w-full py-3 bg-brand-gold hover:bg-brand-gold-hover text-white font-semibold rounded-lg transition-colors cursor-pointer shadow-md" >
+                                Proceed to Payment
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Success/Error Modal view portal component overlay */}
             <Modal isOpen={isModalOpen} onClose={handleModalClose} title={isSuccess ? "" : "Error"} subtitle="" isMobileVariant={false} maxWidth="max-w-[340px]" isFullScreenModal={false} isHeaderVisible={false} unsetHeight >
                 <div className="flex flex-col items-center justify-center p-6 min-h-[200px]">
                     <div>
@@ -185,4 +192,5 @@ export const CheckoutTab = ({ shopId, updateCart }: ManualSearchTabProps) => {
             </Modal>
         </div>
     );
-};
+
+}

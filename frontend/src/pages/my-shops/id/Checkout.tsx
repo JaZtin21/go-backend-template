@@ -60,7 +60,7 @@ export default function Checkout({ isOpen, onClose }: { isOpen: boolean, onClose
                                 {activeTab === 'manual' ? 'Add Item' : activeTab === 'scanner' ? 'Scan Product' : 'Checkout'}
                             </h2>
                         </div>
-                        <div className="relative p-1.5">
+                        <div className="relative p-1.5 cursor-pointer" onClick={() => setActiveTab('checkout')}>
                             <ShoppingCart size={20} className="text-text-sub" />
                             {cart.length > 0 && (
                                 <span className="absolute -top-1 right-2 bg-brand-gold text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center">
@@ -71,75 +71,48 @@ export default function Checkout({ isOpen, onClose }: { isOpen: boolean, onClose
                     </div>
                 }
             >
-                <div className="flex flex-col w-full bg-bg-primary flex-1 h-full">
+                <div className="flex flex-col w-full bg-bg-primary flex-1 h-full overflow-hidden min-h-0 relative">
                     {/* Tab Headers */}
-                    <div className='mx-4'>
-                        <div className="flex bg-bg-primary my-2 rounded-full w-full max-w-xl border border-border-main">
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab('manual')}
-                                className={`flex-1 flex flex-row gap-2 items-center justify-center py-2.5 px-4 text-sm font-semibold transition-all duration-200 rounded-full cursor-pointer ${activeTab === 'manual'
-                                    ? 'bg-brand-gold text-text-white shadow-sm'
-                                    : 'text-text-sub hover:text-text-main'
-                                    }`}
-                            >
+                    <div className="w-full bg-bg-primary pb-2 flex-shrink-0 px-4">
+                        <div className="flex bg-bg-primary my-2 rounded-full w-full max-w-xl border border-border-main mx-auto">
+                            <button type="button" onClick={() => setActiveTab('manual')} className={`flex-1 flex flex-row gap-2 items-center justify-center py-2.5 px-4 text-sm font-semibold transition-all duration-200 rounded-full cursor-pointer ${activeTab === 'manual' ? 'bg-brand-gold text-text-white shadow-sm' : 'text-text-sub hover:text-text-main'}`} >
                                 Manual Input
                             </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab('scanner')}
-                                className={`flex-1 flex flex-row gap-2 items-center justify-center py-2.5 px-4 text-sm font-semibold transition-all duration-200 rounded-full cursor-pointer ${activeTab === 'scanner'
-                                    ? 'bg-brand-gold text-text-white shadow-sm'
-                                    : 'text-text-sub hover:text-text-main'
-                                    }`}
-                            >
+                            <button type="button" onClick={() => setActiveTab('scanner')} className={`flex-1 flex flex-row gap-2 items-center justify-center py-2.5 px-4 text-sm font-semibold transition-all duration-200 rounded-full cursor-pointer ${activeTab === 'scanner' ? 'bg-brand-gold text-text-white shadow-sm' : 'text-text-sub hover:text-text-main'}`} >
                                 AI Scanner
                             </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab('checkout')}
-                                className={`flex-1 flex flex-row gap-2 items-center justify-center py-2.5 px-4 text-sm font-semibold transition-all duration-200 rounded-full cursor-pointer ${activeTab === 'checkout'
-                                    ? 'bg-brand-gold text-text-white shadow-sm'
-                                    : 'text-text-sub hover:text-text-main'
-                                    }`}
-                            >
+                            <button type="button" onClick={() => setActiveTab('checkout')} className={`flex-1 flex flex-row gap-2 items-center justify-center py-2.5 px-4 text-sm font-semibold transition-all duration-200 rounded-full cursor-pointer ${activeTab === 'checkout' ? 'bg-brand-gold text-text-white shadow-sm' : 'text-text-sub hover:text-text-main'}`} >
                                 Checkout ({cart.length})
                             </button>
                         </div>
                     </div>
-
                     {/* Tab Content */}
-                    <div className="w-full bg-bg-primary h-full flex-1 flex overflow-auto">
+                    <div className="w-full bg-bg-primary flex-1 flex min-h-0 overflow-hidden relative">
                         {/* MANUAL SEARCH TAB */}
                         {activeTab === 'manual' && (
                             <ManualSearchTab shopId={shopId || ""} updateCart={() => getCartItems(shopId || "")} />
                         )}
-
                         {/* AI SCANNER TAB */}
                         {activeTab === 'scanner' && (
                             <ScannerTab shopId={shopId || ""} updateCart={() => getCartItems(shopId || "")} />
                         )}
-
                         {/* CHECKOUT TAB */}
                         {activeTab === 'checkout' && (
-                            <div className="flex flex-col gap-4 p-5 w-full h-full">
-                                {cart.length === 0 ? (
-                                    <div className="flex-1 flex items-center justify-center text-text-sub">
-                                        <div className="text-center">
-                                            <ShoppingCart size={48} className="mx-auto mb-4 opacity-50" />
-                                            <p>Your cart is empty</p>
-                                            <p className="text-sm mt-2">Add items using Manual Input or AI Scanner</p>
-                                        </div>
+                            cart.length === 0 ? (
+                                <div className="flex-1 flex items-center justify-center text-text-sub">
+                                    <div className="text-center">
+                                        <ShoppingCart size={48} className="mx-auto mb-4 opacity-50" />
+                                        <p>Your cart is empty</p>
+                                        <p className="text-sm mt-2">Add items using Manual Input or AI Scanner</p>
                                     </div>
-                                ) : (
-                                    <CheckoutTab shopId={shopId || ""} updateCart={() => getCartItems(shopId || "")} />
-                                )}
-                            </div>
+                                </div>
+                            ) : (
+                                <CheckoutTab shopId={shopId || ""} updateCart={() => getCartItems(shopId || "")} />
+                            )
                         )}
                     </div>
                 </div>
+
             </Modal>
         </>
     );

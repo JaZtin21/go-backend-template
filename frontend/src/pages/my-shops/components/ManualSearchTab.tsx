@@ -212,11 +212,11 @@ export const ManualSearchTab = ({ shopId, updateCart }: ManualSearchTabProps) =>
     };
 
     return (
-        <div className="flex flex-col gap-5 w-full  mx-5 my-4 text-text-main">
-            <div className="flex flex-col gap-5 w-full h-full mb-4">
+        <div className="relative flex flex-col w-full h-full min-h-0 overflow-hidden text-text-main">
+            <div className="flex-grow overflow-y-auto min-h-0 flex flex-col gap-4 px-5 pt-2 pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
                 {/* Item Name Search Component */}
-                <div className="relative flex flex-col gap-1 w-full">
+                <div className="relative flex flex-col gap-1.5 w-full ">
                     <label className="block text-sm font-semibold text-text-sub">Item Name</label>
                     <div className="relative">
                         <input
@@ -277,7 +277,7 @@ export const ManualSearchTab = ({ shopId, updateCart }: ManualSearchTabProps) =>
                 </div>
 
                 {/* Selling Price */}
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1.5">
                     <label className="block text-sm font-semibold text-text-sub">Selling Price</label>
                     <input
                         type="text"
@@ -288,7 +288,7 @@ export const ManualSearchTab = ({ shopId, updateCart }: ManualSearchTabProps) =>
                 </div>
 
                 {/* Available Stock */}
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1.5">
                     <label className="block text-sm font-semibold text-text-sub">Available Stock</label>
                     <input
                         type="text"
@@ -299,7 +299,7 @@ export const ManualSearchTab = ({ shopId, updateCart }: ManualSearchTabProps) =>
                 </div>
 
                 {/* 🚀 Clickable Unit of Measure Dropdown Selection Component */}
-                <div className="relative flex flex-col gap-1 w-full">
+                <div className="relative flex flex-col gap-1.5 w-full">
                     <label className="block text-sm font-semibold text-text-sub">Unit of Measure</label>
                     <button
                         type="button"
@@ -339,7 +339,7 @@ export const ManualSearchTab = ({ shopId, updateCart }: ManualSearchTabProps) =>
                 </div>
 
                 {/* Quantity to Buy Stepper Counter */}
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1.5">
                     <label className="block text-sm font-semibold text-text-sub">Quantity to Buy</label>
                     <div className="flex items-center gap-2">
                         <input
@@ -349,7 +349,7 @@ export const ManualSearchTab = ({ shopId, updateCart }: ManualSearchTabProps) =>
                             disabled={!selectedProduct || selectedProduct.stockQuantity === 0}
                             min={selectedProduct?.stockQuantity === 0 ? 0 : 1}
                             max={selectedProduct?.stockQuantity || 0}
-                            className="w-full px-4 py-2 font-semibold border border-border-main rounded-lg bg-bg-primary text-text-main focus:outline-none focus:border-brand-gold disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            className="w-full px-4 py-2  border border-border-main rounded-lg bg-bg-primary text-text-main focus:outline-none focus:border-brand-gold disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                         <button
                             type="button"
@@ -376,7 +376,7 @@ export const ManualSearchTab = ({ shopId, updateCart }: ManualSearchTabProps) =>
                 </div>
 
                 {/* Subtotal */}
-                <div className="flex flex-col gap-1 mt-auto">
+                <div className="flex flex-col gap-1.5 mt-auto">
                     <label className="block text-sm font-semibold text-text-sub">Subtotal</label>
                     <input
                         type="text"

@@ -55,7 +55,7 @@ const Modal = ({ isOpen, onClose, title, subtitle, children, isFullScreenModal, 
                         exit="exit"
                         // 💡 Optional: tweak transition into an easeOut to match native UI layers
                         transition={{ type: 'tween', ease: 'easeOut', duration: 0.15 }}
-                        drag={isMobile ? "y" : false}
+                        drag={isMobile && !isFullScreenModal ? "y" : false}
                         dragConstraints={{ top: 0, bottom: 0 }}
 
                         dragTransition={{
@@ -101,7 +101,7 @@ const Modal = ({ isOpen, onClose, title, subtitle, children, isFullScreenModal, 
 
 
                         {/* FLEXIBLE CONTENT STREAM */}
-                        <div className='flex-1 min-h-0 overflow-y-auto'>
+                        <div className='flex-1 min-h-0 overflow-y-auto relative'>
                             {children}
                         </div>
 
