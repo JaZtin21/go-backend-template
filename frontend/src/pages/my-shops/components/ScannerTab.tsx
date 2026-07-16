@@ -561,7 +561,7 @@ export function ScannerTab({ shopId, updateCart }: ScannerTabProps) {
                     )}
                     {!selectedProduct && !isSearching && searchQuery && searchResults.length === 0 && (
                         <div className="text-center py-8 text-text-sub">
-                            <p>No products found matching "{searchQuery}"</p>
+                            <p>No products found matching "{searchQuery} in your inventory"</p>
                             <p className="text-sm mt-2">Try scanning again or type a different name</p>
                         </div>
                     )}

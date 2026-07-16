@@ -9,6 +9,7 @@ import { getMainDefinition } from '@apollo/client/utilities';
 import { useGoogleLogin } from '@react-oauth/google';
 import { Observable } from '@apollo/client/utilities';
 import { createUploadLink } from '~/api/graphql';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
 
 // =========================================================================
 // 1. EMBEDDED GRAPHQL SCHEMAS & QUERIES (Ground-Truth Contracts)
@@ -249,40 +250,56 @@ export const ApolloProviderWithAuth = ({ children }: { children: React.ReactNode
 
         // ERROR INTERCEPTOR: Automatically refreshes token and replays requests when token expires
         // ERROR INTERCEPTOR: Automatically refreshes token and replays requests when token expires
-        const centralErrorLink = onError((errorHandler: any) => {
-            const { graphQLErrors, operation, forward } = errorHandler;
+        // ...
 
-            if (graphQLErrors) {
-                for (const err of graphQLErrors) {
-                    // Catches the exact machine-readable code thrown by your Go directive middleware!
-                    if (err.extensions?.code === 'TOKEN_EXPIRED') {
-                        return new Observable<any>((observer) => {
-                            executeSilentRefreshSession()
-                                .then((freshToken) => {
-                                    if (!freshToken) {
-                                        observer.error(err);
-                                        return;
-                                    }
-                                    // Overwrite the context headers on the flying request in real time
-                                    operation.setContext(({ headers = {} }) => ({
-                                        headers: {
-                                            ...headers,
-                                            Authorization: `Bearer ${freshToken}`,
-                                        }
-                                    }));
-                                    // Re-forward and play the stalled query payload back to the Go server
-                                    const retrySubscription = forward(operation).subscribe({
-                                        next: observer.next.bind(observer),
-                                        error: observer.error.bind(observer),
-                                        complete: observer.complete.bind(observer),
-                                    });
-                                    return () => retrySubscription.unsubscribe();
-                                })
-                                .catch((error) => observer.error(error));
-                        });
+        const centralErrorLink = onError(({ error, operation, forward }) => {
+            console.log('Error intercepted:', error);
+
+            let shouldRetry = false;
+
+            if (CombinedGraphQLErrors.is(error)) {
+                for (const err of error.errors) {
+                    console.log('GraphQLError intercepted:', err);
+                    if (
+                        err.extensions?.code === 'TOKEN_EXPIRED' ||
+                        err.extensions?.code === 'UNAUTHENTICATED'
+                    ) {
+                        shouldRetry = true;
                     }
                 }
             }
+
+            if (!shouldRetry) return;
+
+            const hasRetried = operation.getContext().hasRetried || false;
+            if (hasRetried) {
+                console.warn('[ApolloProvider] Already retried this operation, not retrying again.');
+                return;
+            }
+
+            return new Observable<any>((observer) => {
+                executeSilentRefreshSession()
+                    .then((freshToken) => {
+                        if (!freshToken) {
+                            observer.error(error);
+                            return;
+                        }
+                        operation.setContext(({ headers = {} }: any) => ({
+                            headers: {
+                                ...headers,
+                                Authorization: `Bearer ${freshToken}`,
+                            },
+                            hasRetried: true,
+                        }));
+                        const retrySubscription = forward(operation).subscribe({
+                            next: observer.next.bind(observer),
+                            error: observer.error.bind(observer),
+                            complete: observer.complete.bind(observer),
+                        });
+                        return () => retrySubscription.unsubscribe();
+                    })
+                    .catch((err) => observer.error(err));
+            });
         });
 
         // WEBSOCKET LINK: For real-time subscriptions with full auth header parsing support
