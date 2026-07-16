@@ -12,6 +12,8 @@ import {
 import { DELETE_INVENTORY_ITEM_MUTATION, GET_SHOP_INVENTORY_QUERY } from '~/api/graphql';
 import InventoryForm from '../components/InventoryForm';
 import type { Item } from '~/types';
+import { Modal } from '~/components';
+import { X, Check, TriangleAlert } from 'lucide-react';
 
 // Generic debounce hook: returns a debounced copy of `value` that only
 // updates after `delay` ms have passed without `value` changing again.
@@ -112,21 +114,61 @@ export const InventoryPage = () => {
         }
     }, [data, isLoading, error, dispatch]);
 
+    const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false);
+    const [modalMessage, setModalMessage] = useState('');
+    const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+
+
+
     // 6. DELETE MUTATION IMPLEMENTATION
-    const [deleteInventoryItem] = useMutation(DELETE_INVENTORY_ITEM_MUTATION, {
+    const [deleteInventoryItem, { loading: isDeleting }] = useMutation(DELETE_INVENTORY_ITEM_MUTATION, {
         refetchQueries: ['GetShopInventory'],
-        onError: (err) => alert(err.message || 'Failed to delete item.')
+        onCompleted: () => {
+            // Reuse your existing modal helper to show success
+            setIsConfirmingDelete(false);
+            setIsModalOpen(true);
+            setIsSuccess(true);
+            setModalMessage('item have been permanently deleted.');
+            setSelectedItemId(null);
+        },
+        onError: (error) => {
+            setIsConfirmingDelete(false);
+            setIsModalOpen(true);
+            setIsSuccess(false);
+            setModalMessage(error.message || 'Failed to delete item. Please try again.');
+
+        }
     });
 
-    const handleDeleteClick = async (itemId: string, name: string) => {
-        const confirmDelete = window.confirm(`Are you sure you want to permanently delete "${name}" and remove its files?`);
-        if (!confirmDelete) return;
+
+    // 1. Triggered when user clicks "Delete" on the shop card
+    const handleOpenDeletePrompt = (itemId: string) => {
+        setSelectedItemId(itemId);
+        setIsConfirmingDelete(true);
+        setIsModalOpen(true);
+    };
+
+    // 2. Triggered when user clicks "Yes, Delete" inside the modal
+    const handleExecuteDelete = async () => {
+        if (!selectedItemId) return;
+
         try {
-            await deleteInventoryItem({ variables: { itemId } });
-            dispatch(deleteInventoryItemAction(itemId)); // Instant client-side strip filter
+            await deleteInventoryItem({ variables: { itemId: selectedItemId } });
         } catch (err) {
             console.error(err);
         }
+    };
+
+    // 3. Extend your clean-up close handler to reset the deletion states
+    const handleModalClose = () => {
+        setIsModalOpen(false);
+        setIsSuccess(false);
+        setIsConfirmingDelete(false);
+        setSelectedItemId(null);
+        setModalMessage('');
     };
 
     useLayoutEffect(() => {
@@ -214,6 +256,7 @@ export const InventoryPage = () => {
         { key: 'selling_price', label: 'Selling Price' },
         { key: 'stock_quantity', label: 'Stocks' },
     ];
+
 
     return (
         <div className="w-full min-h-screen text-text-main flex flex-col">
@@ -311,7 +354,7 @@ export const InventoryPage = () => {
                                                 Edit
                                             </button>
                                             <button
-                                                onClick={() => handleDeleteClick(item.id, item.itemName)}
+                                                onClick={() => handleOpenDeletePrompt(item.id)}
                                                 className="h-7 px-3 text-xs font-bold rounded-md bg-brand-red text-white hover:bg-brand-red-hover transition-colors cursor-pointer shadow-xs"
                                             >
                                                 Delete
@@ -385,6 +428,67 @@ export const InventoryPage = () => {
             </div>
 
             <InventoryForm isOpen={isInventoryModalOpen} onClose={handleCloseInventoryModal} data={selectedItem} />
+
+            <Modal
+                isOpen={isModalOpen}
+                onClose={handleModalClose}
+                title={isConfirmingDelete ? "Are you absolutely sure?" : (isSuccess ? "Success" : "Error")}
+                subtitle=""
+                isMobileVariant={false}
+                maxWidth="max-w-[360px] md:max-w-[400px]"
+                isHeaderVisible={false}
+                unsetHeight
+            >
+                <div className="flex flex-col gap-4 items-center text-center p-2">
+
+                    {isConfirmingDelete ? (
+                        /* --- CONFIRMATION PROMPT VIEW --- */
+                        <div className='p-6 flex gap-6 flex-col'>
+                            <div className="text-3xl self-center"><TriangleAlert className="w-8 h-8 text-brand-red" /></div>
+                            <p className="m-0 text-[15px] max-w-[400px] text-[var(--color-text-sub)] leading-relaxed">
+                                This action cannot be undone. Deleting this item will <strong>permanently remove it</strong>.
+                            </p>
+
+                            <div className="flex gap-3 w-full mt-4">
+                                <button
+                                    onClick={handleModalClose}
+                                    disabled={isDeleting}
+                                    className="flex-1 px-4 py-2.5 bg-[var(--color-bg-primary-hover)] hover:bg-[var(--color-border-main)] text-[var(--color-text-sub)] border border-[var(--color-border-main)] rounded-md font-semibold cursor-pointer transition-colors duration-200 disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleExecuteDelete}
+                                    disabled={isDeleting}
+                                    className="flex-1 px-4 py-2.5 bg-[var(--color-brand-red)] hover:bg-[var(--color-brand-red-hover)] text-[var(--color-text-white)] rounded-md font-semibold cursor-pointer transition-colors duration-200 disabled:opacity-50"
+                                >
+                                    {isDeleting ? 'Deleting...' : 'Yes, Delete it'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        /* --- ORIGINAL SUCCESS / ERROR VIEW --- */
+                        <div className='p-6 flex gap-6 flex-col'>
+                            <div className="text-2xl self-center">
+                                {isSuccess ? <Check className="w-8 h-8 text-brand-green" /> : <X className="w-8 h-8 text-brand-red" />}
+                            </div>
+                            <p className="m-0 text-base max-w-[400px] text-[var(--color-text-sub)]">
+                                {modalMessage}
+                            </p>
+                            <button
+                                onClick={handleModalClose}
+                                className={`mt-2 px-6 self-center w-unset py-2 text-text-white rounded-md font-semibold cursor-pointer transition-colors duration-200
+                                    ${isSuccess
+                                        ? 'bg-[var(--color-brand-green)] hover:bg-[var(--color-brand-green-hover)]'
+                                        : 'bg-[var(--color-brand-red)] hover:bg-[var(--color-brand-red-hover)]'
+                                    }`}
+                            >
+                                OK
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 };
