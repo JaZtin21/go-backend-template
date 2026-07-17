@@ -443,3 +443,21 @@ export const SEARCH_SHOP_PRODUCTS_QUERY = gql`
     }
   }
 `;
+
+export const GET_SHOP_DASHBOARD_METRICS_QUERY = gql`
+  query GetShopDashboardMetrics($shopId: ID!) {
+    getShopDashboardMetrics(shopId: $shopId) {
+      todaysGrossSales
+      todaysSalesGrowthPct
+      weeklyRevenueGrowthIndex
+      averageTicketSize
+      inventoryCapitalRatio
+      weeklySalesTrend {
+        dayName
+        formattedDate
+        grossSale
+        grossProfit
+      }
+    }
+  }
+`;

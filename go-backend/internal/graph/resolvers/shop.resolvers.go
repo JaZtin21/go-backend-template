@@ -1286,6 +1286,7 @@ func (r *queryResolver) GetShopInventory(ctx context.Context, shopID string, lim
 	}, nil
 }
 
+// GetCheckoutHistory is the resolver for the getCheckoutHistory field.
 func (r *queryResolver) GetCheckoutHistory(ctx context.Context, shopID string, limit int, offset int) (*model.PaginatedCheckoutBatches, error) {
 	currentUser := ctx.Value("currentUser").(middleware.CachedUser)
 	if err := utils.EnsureShopOwnership(ctx, r.Resolver.DB, shopID, currentUser.ID); err != nil {
@@ -1638,4 +1639,171 @@ func (r *queryResolver) SearchShopProducts(ctx context.Context, shopID string, q
 		TotalCount:  int(totalCount),
 		HasNextPage: hasNextPage,
 	}, nil
+}
+
+// GetShopDashboardMetrics is the resolver for the getShopDashboardMetrics field.
+func (r *queryResolver) GetShopDashboardMetrics(ctx context.Context, shopID string) (*model.ShopDashboardMetrics, error) {
+	// 1. SECURITY & AUTHN GATE
+	currentUser, ok := ctx.Value("currentUser").(middleware.CachedUser)
+	if !ok {
+		graphql.AddError(ctx, &gqlerror.Error{
+			Message:    "unauthorized: invalid authentication footprint",
+			Extensions: map[string]interface{}{"code": "UNAUTHORIZED"},
+		})
+		return nil, nil
+	}
+
+	// Verify the caller is the actual owner of the shop before executing intensive analytical scans
+	if err := utils.EnsureShopOwnership(ctx, r.Resolver.DB, shopID, currentUser.ID); err != nil {
+		utils.AddHistoryGraphQLError(ctx, err)
+		return nil, nil
+	}
+
+	var metrics model.ShopDashboardMetrics
+
+	// 2. WIDGET 1 & 2: CALCULATE TODAY'S GROSS SALES & GROWTH RATE VS SAME DAY LAST WEEK
+	// Compares today's running sales total to what was made during the exact same period 7 days ago.
+	salesQuery := `
+		WITH metrics_today AS (
+			SELECT COALESCE(SUM(gross_sale), 0.0) as sales
+			FROM checkout_batches 
+			WHERE shop_id = $1 AND sold_at::timestamp >= CURRENT_DATE
+		),
+		metrics_last_week AS (
+			SELECT COALESCE(SUM(gross_sale), 0.0) as sales
+			FROM checkout_batches 
+			WHERE shop_id = $1 
+			  AND sold_at::timestamp >= CURRENT_DATE - INTERVAL '7 days'
+			  AND sold_at::timestamp < CURRENT_DATE - INTERVAL '6 days'
+		)
+		SELECT t.sales, 
+		       CASE WHEN l.sales = 0 THEN 0.0 ELSE ((t.sales - l.sales) / l.sales) * 100.0 END
+		FROM metrics_today t, metrics_last_week l;
+	`
+	err := r.Resolver.DB.QueryRow(ctx, salesQuery, shopID).Scan(
+		&metrics.TodaysGrossSales,
+		&metrics.TodaysSalesGrowthPct,
+	)
+	if err != nil {
+		log.Printf("Error calculating daily revenue snapshot: %v", err)
+		graphql.AddError(ctx, &gqlerror.Error{Message: "internal server error: revenue aggregation failure", Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"}})
+		return nil, nil
+	}
+
+	// 3. WIDGET 3: WEEKLY REVENUE GROWTH INDEX (This week vs Previous week)
+	// Balance Score metric. 100 means the store perfectly matched last week's raw performance.
+	weeklyQuery := `
+		WITH current_7_days AS (
+			SELECT COALESCE(SUM(gross_sale), 0.0) as total 
+			FROM checkout_batches 
+			WHERE shop_id = $1 AND sold_at::timestamp >= NOW() - INTERVAL '7 days'
+		),
+		previous_7_days AS (
+			SELECT COALESCE(SUM(gross_sale), 0.0) as total 
+			FROM checkout_batches 
+			WHERE shop_id = $1 
+			  AND sold_at::timestamp >= NOW() - INTERVAL '14 days' 
+			  AND sold_at::timestamp < NOW() - INTERVAL '7 days'
+		)
+		SELECT CASE WHEN p.total = 0 THEN 100.0 ELSE (c.total / p.total) * 100.0 END
+		FROM current_7_days c, previous_7_days p;
+	`
+	err = r.Resolver.DB.QueryRow(ctx, weeklyQuery, shopID).Scan(&metrics.WeeklyRevenueGrowthIndex)
+	if err != nil {
+		log.Printf("Error calculating weekly revenue index: %v", err)
+		graphql.AddError(ctx, &gqlerror.Error{Message: "internal server error: weekly trend compilation anomaly", Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"}})
+		return nil, nil
+	}
+
+	// 4. WIDGET 4: AVERAGE TICKET SIZE (AOV)
+	// Calculates the average monetary transaction value passing through registers.
+	aovQuery := `
+		SELECT COALESCE(AVG(gross_sale), 0.0) 
+		FROM checkout_batches 
+		WHERE shop_id = $1;
+	`
+	err = r.Resolver.DB.QueryRow(ctx, aovQuery, shopID).Scan(&metrics.AverageTicketSize)
+	if err != nil {
+		log.Printf("Error calculating average basket tickets: %v", err)
+		graphql.AddError(ctx, &gqlerror.Error{Message: "internal server error: ticket computation anomaly", Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"}})
+		return nil, nil
+	}
+
+	// 5. WIDGET 5: INVENTORY CAPITAL RATIO (Wholesale Cost vs Retail Value realization)
+	// Tracks how much capital liquidity is frozen in shelf stocks.
+	capitalQuery := `
+		SELECT 
+			CASE 
+				WHEN SUM(selling_price * stock_quantity) = 0 THEN 0.0
+				ELSE (SUM(cost_price * stock_quantity) / SUM(selling_price * stock_quantity)) * 100.0 
+			END
+		FROM inventory_items
+		WHERE shop_id = $1;
+	`
+	err = r.Resolver.DB.QueryRow(ctx, capitalQuery, shopID).Scan(&metrics.InventoryCapitalRatio)
+	if err != nil {
+		log.Printf("Error calculating capital realization parameters: %v", err)
+		graphql.AddError(ctx, &gqlerror.Error{Message: "internal server error: resource analysis failure", Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"}})
+		return nil, nil
+	}
+
+	// 6. WIDGET 6: PAST 7-DAY SALES HISTORY TREND ENGINE
+	// Generates a recursive calendar series sequence to output historical values or zero states.
+	trendQuery := `
+		WITH RECURSIVE days AS (
+			SELECT CURRENT_DATE - INTERVAL '6 days' AS calendar_day
+			UNION ALL
+			SELECT calendar_day + INTERVAL '1 day'
+			FROM days
+			WHERE calendar_day < CURRENT_DATE
+		),
+		daily_sales AS (
+			SELECT 
+				sold_at::date AS sales_day,
+				COALESCE(SUM(gross_sale), 0.0) AS total_sales,
+				COALESCE(SUM(gross_profit), 0.0) AS total_profit
+			FROM checkout_batches
+			WHERE shop_id = $1 AND sold_at::timestamp >= CURRENT_DATE - INTERVAL '6 days'
+			GROUP BY sales_day
+		)
+		SELECT 
+			TO_CHAR(d.calendar_day, 'Dy') AS day_name,
+			TO_CHAR(d.calendar_day, 'MM/DD') AS formatted_date,
+			COALESCE(s.total_sales, 0.0) AS gross_sale,
+			COALESCE(s.total_profit, 0.0) AS gross_profit
+		FROM days d
+		LEFT JOIN daily_sales s ON d.calendar_day = s.sales_day
+		ORDER BY d.calendar_day ASC;
+	`
+	rows, err := r.Resolver.DB.Query(ctx, trendQuery, shopID)
+	if err != nil {
+		log.Printf("Weekly chart matrix extraction failure: %v", err)
+		graphql.AddError(ctx, &gqlerror.Error{Message: "internal server error: weekly trend compilation failure", Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"}})
+		return nil, nil
+	}
+	defer rows.Close()
+
+	var weeklySalesTrend []*model.DailySalesMetric
+	for rows.Next() {
+		var dayMetric model.DailySalesMetric
+		err := rows.Scan(
+			&dayMetric.DayName,
+			&dayMetric.FormattedDate,
+			&dayMetric.GrossSale,
+			&dayMetric.GrossProfit,
+		)
+		if err != nil {
+			log.Printf("Error decoding weekly trend data frames: %v", err)
+			return nil, err
+		}
+		weeklySalesTrend = append(weeklySalesTrend, &dayMetric)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	metrics.WeeklySalesTrend = weeklySalesTrend
+
+	return &metrics, nil
 }

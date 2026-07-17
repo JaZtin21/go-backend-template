@@ -11,7 +11,7 @@ import type { Product, CartItem } from "~/types/item";
 
 
 export default function Checkout({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
-    const [activeTab, setActiveTab] = useState<'manual' | 'scanner' | 'checkout'>('manual');
+    const [activeTab, setActiveTab] = useState<'manual' | 'scanner' | 'checkout'>('scanner');
     const { id: shopId } = useParams<{ id: string }>();
 
     const [cart, setCart] = useState<CartItem[]>([]);

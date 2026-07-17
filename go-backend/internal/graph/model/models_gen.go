@@ -110,6 +110,13 @@ type CreateShopInput struct {
 	Photos         []*graphql.Upload     `json:"photos,omitempty"`
 }
 
+type DailySalesMetric struct {
+	DayName       string  `json:"dayName"`
+	FormattedDate string  `json:"formattedDate"`
+	GrossSale     float64 `json:"grossSale"`
+	GrossProfit   float64 `json:"grossProfit"`
+}
+
 type DecrementStockInput struct {
 	ItemID           string `json:"itemId"`
 	QuantityToRemove int    `json:"quantityToRemove"`
@@ -131,6 +138,12 @@ type DeliveryOptionsInput struct {
 
 type GoogleLoginInput struct {
 	Code string `json:"code"`
+}
+
+type HourlySalesMetric struct {
+	Hour         int `json:"hour"`
+	Transactions int `json:"transactions"`
+	ItemsSold    int `json:"itemsSold"`
 }
 
 type IncrementStockInput struct {
@@ -288,6 +301,15 @@ type Shop struct {
 	Photos         []string         `json:"photos"`
 	Reviews        []*ShopReview    `json:"reviews"`
 	CreatedAt      string           `json:"createdAt"`
+}
+
+type ShopDashboardMetrics struct {
+	TodaysGrossSales         float64             `json:"todaysGrossSales"`
+	TodaysSalesGrowthPct     float64             `json:"todaysSalesGrowthPct"`
+	WeeklyRevenueGrowthIndex float64             `json:"weeklyRevenueGrowthIndex"`
+	AverageTicketSize        float64             `json:"averageTicketSize"`
+	InventoryCapitalRatio    float64             `json:"inventoryCapitalRatio"`
+	WeeklySalesTrend         []*DailySalesMetric `json:"weeklySalesTrend"`
 }
 
 type ShopReview struct {

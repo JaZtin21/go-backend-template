@@ -320,6 +320,38 @@ input UpdateInventoryItemInput {
   newPhoto: Upload
 }
 
+
+type HourlySalesMetric {
+  hour: Int!          # Hour of the day (0 to 23)
+  transactions: Int!  # Number of checkout batches in this hour (Teal Bars)
+  itemsSold: Int!     # Total count of individual items moved (Orange Bars)
+}
+
+type DailySalesMetric {
+  dayName: String!   # "Mon", "Tue", "Wed", etc.
+  formattedDate: String! # "MM/DD" or "YYYY-MM-DD"
+  grossSale: Float!       # Total sales volume (The Bar Height)
+  grossProfit: Float!     # Total profit margins (For the Tooltip Hover Box)
+}
+
+type ShopDashboardMetrics {
+  # Main Left Circle Widget
+  todaysGrossSales: Float!       # Today's total gross cash volume
+  todaysSalesGrowthPct: Float!   # Percentage change (+/-) vs. the same day last week
+  
+  # Top-Center Circle Widget
+  weeklyRevenueGrowthIndex: Float! # 7-day revenue comparison score vs. the previous 7 days (100 = matched performance)
+  
+  # Bottom-Center Circle Widget
+  averageTicketSize: Float!      # Average money spent per customer checkout transaction
+  
+  # Far-Right Circle Widget
+  inventoryCapitalRatio: Float!  # Ratio of wholesale cost vs. potential full retail value tied up on shelves
+  
+  # Center Twin Bar Chart Matrix
+  weeklySalesTrend: [DailySalesMetric!]!
+}
+
 # --- EXTENSIONS ---
 
 extend type Query {
@@ -334,6 +366,8 @@ extend type Query {
   searchShop(query: String!, limit: Int!, offset: Int!): PaginatedShops!
   searchProduct(query: String!, limit: Int!, offset: Int!): PaginatedPublicProducts!
   searchShopProducts(shopId: ID!, query: String!, limit: Int!, offset: Int!): PaginatedPublicProducts!
+
+  getShopDashboardMetrics(shopId: ID!): ShopDashboardMetrics! @isAuthenticated
 }
 
 extend type Mutation {

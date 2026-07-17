@@ -58,4 +58,22 @@ export interface Shop {
   status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'active' | 'inactive' | 'suspended';
 }
 
+export interface DailySalesMetric {
+  dayName: string;
+  formattedDate: string;
+  grossSale: number;
+  grossProfit: number;
+}
 
+export interface ShopDashboardMetrics {
+  todaysGrossSales: number;
+  todaysSalesGrowthPct: number;
+  weeklyRevenueGrowthIndex: number;
+  averageTicketSize: number;
+  inventoryCapitalRatio: number;
+  weeklySalesTrend: DailySalesMetric[]; // Swapped with the old hourly array
+}
+
+export interface GetShopDashboardMetricsData {
+  getShopDashboardMetrics: ShopDashboardMetrics;
+}

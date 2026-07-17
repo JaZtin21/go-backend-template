@@ -9,6 +9,8 @@ import { useQuery } from '@apollo/client/react';
 import {
     ResponsiveContainer,
     AreaChart,
+    ComposedChart,
+    Line,
     Area,
     XAxis,
     YAxis,
@@ -23,7 +25,7 @@ import {
 import { ShoppingCart, PlusCircle, Package, MessageSquare, Store, ArrowLeft, History } from 'lucide-react';
 import { setAddShopModalOpen } from '~/store/uiSlice';
 import InventoryForm from '../components/InventoryForm';
-import { GET_SHOP_BY_ID_QUERY } from '~/api/graphql';
+import { GET_SHOP_BY_ID_QUERY, GET_SHOP_DASHBOARD_METRICS_QUERY } from '~/api/graphql';
 import { updateShop } from '~/store/myShopsSlice';
 import Checkout from './Checkout';
 
@@ -74,10 +76,43 @@ export const ShopDetailDashboard = () => {
 
     // 2. RUN STANDALONE FALLBACK QUERY (Skips network roundtrips if shop is already cached in Redux)
     const { loading: isLoading, data, error } = useQuery(GET_SHOP_BY_ID_QUERY, {
-        variables: { shopId: id },
+        variables: { shopId: shopId },
         skip: !id || !!shop, // 💡 True security guard optimization bypass
         fetchPolicy: 'no-cache' // Pure utility strategy to directly mirror database states
     }) as { loading: boolean; error: any; data: { getShopById: Shop } | undefined };
+
+    const { data: metrics, loading: metricsLoading, error: metricsError } = useQuery(
+        GET_SHOP_DASHBOARD_METRICS_QUERY,
+        { variables: { shopId: shopId } }
+    ) as { data: { getShopDashboardMetrics: any }; loading: boolean; error: any; };
+
+    console.log(metrics, 'this is metrics');
+
+    // Format helper utility for financial readouts
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat('en-PH', {
+            style: 'currency',
+            currency: 'PHP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(value);
+    };
+
+    // Format helper to convert numeric trends to readable strings
+    const formatGrowthRate = (pct: number) => {
+        const prefix = pct >= 0 ? '+' : '';
+        return `${prefix}${pct.toFixed(1)}% vs last week`;
+    };
+
+    // SAFE ACCESS WRAPPER: Read directly from the base object with fallbacks
+    const baseMetrics = metrics?.getShopDashboardMetrics;
+    const todaysGrossSales = baseMetrics?.todaysGrossSales ?? 0;
+    const todaysSalesGrowthPct = baseMetrics?.todaysSalesGrowthPct ?? 0;
+    const weeklyRevenueGrowthIndex = baseMetrics?.weeklyRevenueGrowthIndex ?? 100;
+    const averageTicketSize = baseMetrics?.averageTicketSize ?? 0;
+    const inventoryCapitalRatio = baseMetrics?.inventoryCapitalRatio ?? 0;
+    const weeklySalesTrend = baseMetrics?.weeklySalesTrend ?? [];
+
 
     // 3. LIFECYCLE DATA BOUNDARY SYNC: Merge back directly into your core array on reload
     useEffect(() => {
@@ -104,6 +139,9 @@ export const ShopDetailDashboard = () => {
     const handleOpenCheckoutModal = () => setIsCheckoutModalOpen(true);
 
 
+
+
+
     return (
         <div className="min-h-screen bg-bg-secondary transition-colors duration-300 pb-12">
 
@@ -125,7 +163,7 @@ export const ShopDetailDashboard = () => {
                 {/* Explicit min-width prevents container squishing, allowing clean native horizontal scrolling */}
                 <div className="flex items-center justify-between gap-12 min-w-[1300px] w-full px-8 py-4">
 
-                    {/* SECTION 1: MASTER RECHARTS RADIAL BAR (Today's Lift) */}
+                    {/* SECTION 1: MASTER RECHARTS RADIAL BAR (Today's Gross Sales) */}
                     <div className="flex items-center gap-10 shrink-0 flex-1 max-w-md">
                         <div className="w-80 h-80 relative flex items-center justify-center shrink-0">
                             <ResponsiveContainer width="100%" height="100%">
@@ -135,117 +173,142 @@ export const ShopDetailDashboard = () => {
                                     innerRadius="80%"
                                     outerRadius="100%"
                                     barSize={20}
-                                    data={[{ value: SHOP_METRICS.progressMetrics.todayLiftPct, fill: 'var(--color-brand-green)' }]}
+                                    data={[{ value: Math.min(weeklyRevenueGrowthIndex, 100), fill: 'var(--color-brand-green)' }]}
                                     startAngle={90}
                                     endAngle={-270}
                                 >
-                                    {/* The radial data track */}
-                                    <RadialBar
-                                        background={{ fill: 'var(--color-brand-green)', opacity: 0.1 }}
-                                        dataKey="value"
-                                        cornerRadius={10}
-                                    />
-
-                                    {/* NATIVE CENTERING COMPONENT BLOCK */}
-                                    <Legend
-                                        layout="vertical"
-                                        verticalAlign="middle"
-                                        align="center"
-                                        content={() => (
-                                            <div className="text-center flex flex-col items-center justify-center select-none ">
-                                                {/* 1. STORE NAME STACKED ON TOP */}
-                                                <span className="text-md line-clamp-2 font-bold text-text-muted tracking-tight max-w-[160px] mb-1 mt-[-2rem]">
-                                                    {shop?.shopName}
-                                                </span>
-
-                                                {/* 2. EARNINGS DISPLAY ROW */}
-                                                <span className="text-4xl font-black text-text-main tracking-tighter leading-none mt-2">
-                                                    {SHOP_METRICS.stats.todaySales}
-                                                </span>
-
-                                                {/* 3. METRICS RATIO BASEMENT */}
-                                                <p className="text-xs text-brand-green font-extrabold mt-2">
-                                                    {SHOP_METRICS.stats.growthRate}
-                                                </p>
-                                            </div>
-                                        )}
-                                    />
+                                    <RadialBar background={{ fill: 'var(--color-brand-green)', opacity: 0.1 }} dataKey="value" cornerRadius={10} />
+                                    <Legend layout="vertical" verticalAlign="middle" align="center" content={() => (
+                                        <div className="text-center flex flex-col items-center justify-center select-none">
+                                            {/* 1. STORE NAME STACKED ON TOP */}
+                                            <span className="text-md line-clamp-2 font-bold text-text-muted tracking-tight max-w-[160px] mb-1 mt-[-2rem]">
+                                                {shop?.shopName}
+                                            </span>
+                                            {/* 2. LIVE TODAY REVENUE TRACKER */}
+                                            <span className="text-4xl font-black text-text-main tracking-tighter leading-none mt-2">
+                                                {formatCurrency(todaysGrossSales)}
+                                            </span>
+                                            {/* 3. TREND COMPARISON FOOTER */}
+                                            <p className={`text-xs font-extrabold mt-2 ${todaysSalesGrowthPct >= 0 ? 'text-brand-green' : 'text-brand-red'}`}>
+                                                {formatGrowthRate(todaysSalesGrowthPct)}
+                                            </p>
+                                        </div>
+                                    )} />
                                 </RadialBarChart>
-
                             </ResponsiveContainer>
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-2xl font-black text-text-main tracking-tight">Today's Lift</span>
+                            <span className="text-2xl font-black text-text-main tracking-tight">Today's Sales</span>
                             <span className="text-sm font-semibold text-text-muted mt-1.5">Primary revenue scale</span>
                         </div>
                     </div>
 
                     {/* SECTION 2: VERTICALLY STACKED RECHARTS RADIAL BARS */}
-                    <div className="flex flex-col gap-10 shrink-0 justify-center flex-1 ">
-                        {/* Upper Stack Ring (Weekly Target) */}
+                    <div className="flex flex-col gap-10 shrink-0 justify-center flex-1">
+                        {/* Upper Stack Ring (7-Day Growth Index) */}
                         <div className="flex items-center gap-6">
                             <div className="w-35 h-35 relative flex items-center justify-center shrink-0">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <RadialBarChart cx="50%" cy="50%" innerRadius="75%" outerRadius="100%" barSize={14} data={[{ value: SHOP_METRICS.progressMetrics.weeklyTargetPct, fill: 'var(--color-brand-gold)' }]} startAngle={90} endAngle={-270}>
+                                    <RadialBarChart cx="50%" cy="50%" innerRadius="75%" outerRadius="100%" barSize={14} data={[{ value: Math.min(weeklyRevenueGrowthIndex, 100), fill: 'var(--color-brand-gold)' }]} startAngle={90} endAngle={-270}>
                                         <RadialBar background={{ fill: 'var(--color-brand-gold)', opacity: 0.15 }} dataKey="value" cornerRadius={6} />
                                     </RadialBarChart>
                                 </ResponsiveContainer>
-                                <span className="absolute text-base font-black text-text-main">{SHOP_METRICS.progressMetrics.weeklyTargetPct}%</span>
+                                <span className="absolute text-base font-black text-text-main">{weeklyRevenueGrowthIndex.toFixed(0)}%</span>
                             </div>
-                            <span className="text-lg font-black text-text-sub tracking-tight">Weekly Target</span>
+                            <span className="text-lg font-black text-text-sub tracking-tight">7-Day Growth Index</span>
                         </div>
-                        {/* Lower Stack Ring (Live Orders) */}
+
+                        {/* Lower Stack Ring (Average Ticket Size / Basket Value) */}
                         <div className="flex items-center gap-6">
                             <div className="w-35 h-35 relative flex items-center justify-center shrink-0">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <RadialBarChart cx="50%" cy="50%" innerRadius="75%" outerRadius="100%" barSize={14} data={[{ value: SHOP_METRICS.progressMetrics.liveOrdersPct, fill: 'var(--color-brand-red)' }]} startAngle={90} endAngle={-270}>
+                                    <RadialBarChart cx="50%" cy="50%" innerRadius="75%" outerRadius="100%" barSize={14} data={[{ value: 100, fill: 'var(--color-brand-red)' }]} startAngle={90} endAngle={-270}>
                                         <RadialBar background={{ fill: 'var(--color-brand-red)', opacity: 0.15 }} dataKey="value" cornerRadius={6} />
                                     </RadialBarChart>
                                 </ResponsiveContainer>
-                                <span className="absolute text-base font-black text-text-main">{SHOP_METRICS.stats.activeOrders}</span>
+                                <span className="absolute text-xs font-black text-text-main">{averageTicketSize.toFixed(0)}</span>
                             </div>
-                            <span className="text-lg font-black text-text-sub tracking-tight">Live Orders</span>
+                            <div className="flex flex-col">
+                                <span className="text-lg font-black text-text-sub tracking-tight">Avg Basket Ticket</span>
+                                <span className="text-xs text-text-muted font-bold">{formatCurrency(averageTicketSize)} avg</span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* SECTION 3: RECHARTS MULTI-COLUMN COMPARISON CLUSTERS */}
-                    {/* FIXED: Added a stable h-40 container with explicit layout scaling properties */}
-                    <div className="flex items-center gap-16 flex-1 justify-center  h-40">
-                        {/* Sub-container A */}
-                        <div className="w-full h-full flex-1 min-w-[120px]">
+                    {/* SECTION 3: RECHARTS UNIFIED 7-DAY VOLUME REVENUE TREND GRAPH (REPLACED OLD HOURLY BARS) */}
+                    {/* SECTION 3: RECHARTS UNIFIED 7-DAY HYBRID REVENUE MATRIX (BARS + ZIGZAG TRENDLINE) */}
+                    <div className="flex flex-col flex-1 justify-center h-44 px-4 min-w-[280px] max-w-sm">
+                        <div className="w-full h-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={SHOP_METRICS.comparisonBars} margin={{ top: 0, right: 0, left: 0, bottom: 0 }} barGap={12}>
-                                    <Bar dataKey="actual" fill="var(--color-brand-green)" opacity={0.4} radius={[6, 6, 0, 0]} />
-                                    <Bar dataKey="target" fill="var(--color-brand-green)" opacity={0.7} radius={[6, 6, 0, 0]} />
-                                    <Bar dataKey="projected" fill="var(--color-brand-green)" radius={[6, 6, 0, 0]} />
-                                </BarChart>
+                                {/* 1. Swap BarChart out for ComposedChart to unlock multi-type drawing lanes */}
+                                <ComposedChart
+                                    data={weeklySalesTrend}
+                                    margin={{ top: 15, right: 5, left: 5, bottom: 5 }}
+                                >
+                                    <XAxis
+                                        dataKey="dayName"
+                                        axisLine={{ stroke: 'rgba(148, 163, 184, 0.2)', strokeWidth: 1.5 }}
+                                        tickLine={false}
+                                        tick={{ fill: '#94A3B8', fontSize: 11, fontWeight: '800' }}
+                                        dy={8}
+                                    />
+
+                                    <Tooltip
+                                        cursor={{ fill: 'rgba(148, 163, 184, 0.04)', radius: 6 }}
+                                        content={({ active, payload }) => {
+                                            if (active && payload && payload.length) {
+                                                const data = payload[0].payload;
+                                                return (
+                                                    <div className="p-3 bg-white rounded-xl border border-slate-200 font-bold flex flex-col gap-1 shadow-md select-none text-xs">
+                                                        <p className="text-text-muted font-black mb-0.5">{data.formattedDate}</p>
+                                                        <p className="text-slate-800">Sales: {formatCurrency(data.grossSale)}</p>
+                                                        <p className="text-brand-green">Profit: {formatCurrency(data.grossProfit)}</p>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        }}
+                                    />
+
+                                    {/* 2. The Background Columns (Tracking Total Revenue Volume) */}
+                                    <Bar
+                                        dataKey="grossSale"
+                                        fill="var(--color-brand-green)"
+                                        radius={[4, 4, 0, 0]}
+                                        barSize={20}
+                                    />
+
+                                    {/* 3. The Zigzag Overlay Line (Tracking Net Earning Trajectories) */}
+                                    <Line
+                                        type="monotone"
+                                        dataKey="grossSale"  // Change this from grossProfit to grossSale
+                                        stroke='rgba(148, 163, 184, 0.2)'
+                                        strokeWidth={2.5}
+                                        dot={{ fill: 'rgba(148, 163, 184, 0.2)', r: 3 }}
+                                        activeDot={{ r: 5 }}
+                                    />
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
-                        {/* Sub-container B */}
-                        <div className="w-full h-full flex-1 min-w-[120px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={SHOP_METRICS.comparisonBars} margin={{ top: 0, right: 0, left: 0, bottom: 0 }} barGap={12}>
-                                    <Bar dataKey="actual" fill="var(--color-brand-gold)" opacity={0.4} radius={[6, 6, 0, 0]} />
-                                    <Bar dataKey="target" fill="var(--color-brand-gold)" opacity={0.7} radius={[6, 6, 0, 0]} />
-                                    <Bar dataKey="projected" fill="var(--color-brand-gold)" radius={[6, 6, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
+                        <p className="text-[10px] text-center font-bold text-text-muted mt-2 uppercase tracking-wider select-none">
+                            7-Day Sales & Profit Trend
+                        </p>
                     </div>
 
-                    {/* SECTION 4: SECONDARY BALANCE RECHARTS RADIAL BAR (Market Health) */}
-                    <div className="flex items-center gap-10 shrink-0  border-l-2 border-bg-secondary/60 flex-1 max-w-md justify-end">
+
+                    {/* SECTION 4: SECONDARY BALANCE RECHARTS RADIAL BAR (Stock Efficiency Realization Index) */}
+                    <div className="flex items-center gap-10 shrink-0 border-l-2 border-bg-secondary/60 flex-1 max-w-md justify-end">
                         <div className="flex flex-col text-right">
-                            <span className="text-2xl font-black text-text-main tracking-tight">Market Health</span>
-                            <span className="text-sm font-semibold text-text-muted mt-1.5">Retention index</span>
+                            <span className="text-2xl font-black text-text-main tracking-tight">Capital Locked</span>
+                            <span className="text-sm font-semibold text-text-muted mt-1.5">Shelf Liquidity Ratio</span>
                         </div>
                         <div className="w-52 h-52 relative flex items-center justify-center shrink-0">
                             <ResponsiveContainer width="100%" height="100%">
-                                <RadialBarChart cx="50%" cy="50%" innerRadius="80%" outerRadius="100%" barSize={16} data={[{ value: SHOP_METRICS.progressMetrics.marketHealthPct, fill: 'var(--color-brand-gold)' }]} startAngle={90} endAngle={-270}>
+                                <RadialBarChart cx="50%" cy="50%" innerRadius="80%" outerRadius="100%" barSize={16} data={[{ value: Math.min(inventoryCapitalRatio, 100), fill: 'var(--color-brand-gold)' }]} startAngle={90} endAngle={-270}>
                                     <RadialBar background={{ fill: 'var(--color-brand-gold)', opacity: 0.1 }} dataKey="value" cornerRadius={8} />
                                 </RadialBarChart>
                             </ResponsiveContainer>
-                            <span className="absolute text-xl font-black text-text-main">{SHOP_METRICS.progressMetrics.marketHealthPct}%</span>
+                            <span className="absolute text-xl font-black text-text-main">{inventoryCapitalRatio.toFixed(0)}%</span>
                         </div>
                     </div>
 
@@ -256,10 +319,11 @@ export const ShopDetailDashboard = () => {
 
 
 
+
             {/* --- COMPLETE ACTIONS GRID SECTION (Matches 5 buttons layout structure) --- */}
             {/* --- ACTION GRID: 5 BUTTONS FROM IMAGE --- */}
             {/* --- ACTION GRID: 5 BUTTONS (Matches Shop Card Layout Styles) --- */}
-            <div className="grid grid-cols-2  md:grid-cols-4 lg:grid-cols-6 gap-6">
+            <div className="grid grid-cols-2  md:grid-cols-4 lg:grid-cols-5 gap-6">
 
                 {/* 1. Someone is buying (Modal Trigger) */}
                 <div
