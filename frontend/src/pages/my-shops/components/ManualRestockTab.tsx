@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useLazyQuery } from '@apollo/client/react';
-import { SEARCH_SHOP_PRODUCTS_QUERY } from '~/api/graphql';
+import { useLazyQuery, useMutation } from '@apollo/client/react';
+import { SEARCH_SHOP_PRODUCTS_QUERY, INCREMENT_STOCK_MUTATION } from '~/api/graphql';
 import { Product } from '~/types/item';
 import { ImageIcon, Plus, Minus, ChevronDown } from 'lucide-react';
 import { Modal } from '~/components';
 import { X, Check, XIcon } from 'lucide-react';
+import { on } from 'events';
 interface ManualSearchTabProps {
     shopId: string;
     updateCart: () => void
@@ -21,8 +22,8 @@ export const ManualRestockTab = ({ shopId, updateCart }: ManualSearchTabProps) =
     const [showDropdown, setShowDropdown] = useState(false);
 
     // 🚀 Stores all alternative items sharing the exact same name
-    const [groupedProducts, setGroupedProducts] = useState<Product[]>([]);
-    const [showUnitDropdown, setShowUnitDropdown] = useState(false);
+    //const [groupedProducts, setGroupedProducts] = useState<Product[]>([]);
+    //const [showUnitDropdown, setShowUnitDropdown] = useState(false);
 
     const [searchProducts] = useLazyQuery(SEARCH_SHOP_PRODUCTS_QUERY, {
         fetchPolicy: 'network-only',
@@ -64,8 +65,8 @@ export const ManualRestockTab = ({ shopId, updateCart }: ManualSearchTabProps) =
         }
 
         // 🚀 Typing resets both grouping states completely
-        setGroupedProducts([]);
-        setShowUnitDropdown(false);
+        //setGroupedProducts([]);
+        //setShowUnitDropdown(false);
 
         clearTimeout(searchTimeoutId);
 
@@ -90,7 +91,7 @@ export const ManualRestockTab = ({ shopId, updateCart }: ManualSearchTabProps) =
         const matchingItems = searchResults.filter(
             (item) => item.itemName.toLowerCase() === product.itemName.toLowerCase()
         );
-        setGroupedProducts(matchingItems);
+        //setGroupedProducts(matchingItems);
 
         if (product.stockQuantity === 0) {
             setQuantity(0);
@@ -99,16 +100,6 @@ export const ManualRestockTab = ({ shopId, updateCart }: ManualSearchTabProps) =
         }
     };
 
-    const handleUnitSelect = (productVariant: Product) => {
-        setSelectedProduct(productVariant);
-        setShowUnitDropdown(false);
-
-        if (productVariant.stockQuantity === 0) {
-            setQuantity(0);
-        } else {
-            setQuantity(1);
-        }
-    };
 
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -121,59 +112,53 @@ export const ManualRestockTab = ({ shopId, updateCart }: ManualSearchTabProps) =
     };
 
 
-    const handleAddToCart = () => {
+    const [incrementStock, { loading: isIncrementing }] = useMutation(INCREMENT_STOCK_MUTATION, {
+        // Automatically refetch your dashboard charts so your "Capital Locked" ring updates live!
+        onCompleted: () => {
+            setIsModalOpen(true);
+            setIsSuccess(true);
+            setModalMessage('Stock updated successfully for' + ' ' + selectedProduct?.itemName);
+        },
+        awaitRefetchQueries: true,
+        onError: (err) => {
+            setIsModalOpen(true);
+            setIsSuccess(false);
+            setModalMessage('Failed to update stock. Please try again.');
+            setErrorMessage(err.message);
+        }
+    });
+
+
+    const handleAddToCart = async () => {
         if (!selectedProduct || !quantity) return;
 
-        const storageKey = `cart_items_${shopId}`;
-        const existingCartRaw = localStorage.getItem(storageKey);
-        let currentCart: Array<{ product: Product; quantity: number }> = [];
+
 
         try {
-            if (existingCartRaw) {
-                currentCart = JSON.parse(existingCartRaw);
-            }
-        } catch (err) {
-            console.error("Failed to parse cart storage array:", err);
-        }
-
-        // Identify if the product asset is already added in local storage cache registers
-        const existingItem = currentCart.find((item) => item.product.id === selectedProduct.id);
-        const alreadyInCartQty = existingItem ? existingItem.quantity : 0;
-
-        // Calculate how many more items can safely be added before exceeding limits
-        const allowedRemainingQty = selectedProduct.stockQuantity - alreadyInCartQty;
-
-        // 🚀 STAGE LIMIT VALIDATION THROW: If the new amount exceeds what is left, trigger your exact modal parameters
-        if (Number(quantity) > allowedRemainingQty) {
-            setIsSuccess(false); // Triggers red X asset and drops title to "Error"
-            setModalMessage("Stock Limit Exceeded");
-            setErrorMessage(
-                `You cannot add ${quantity} units. You already have some in your cart, meaning there are only ${Math.max(0, allowedRemainingQty)} units remaining available to add.`
-            );
-            setIsModalOpen(true);
-            return; // ⚡ Bails immediately! Leaves form inputs, counters, and dropdown states completely un-wiped
-        }
-
-        // Proceed normally if validation criteria passes smoothly
-        const existingItemIndex = currentCart.findIndex((item) => item.product.id === selectedProduct.id);
-        if (existingItemIndex > -1) {
-            currentCart[existingItemIndex].quantity += Number(quantity);
-        } else {
-            currentCart.push({
-                product: selectedProduct,
-                quantity: Number(quantity)
+            // 1. Fire the GraphQL mutation to update PostgreSQL stock rows
+            await incrementStock({
+                variables: {
+                    input: {
+                        itemId: selectedProduct.id,
+                        quantityToAdd: parseInt(quantity.toString(), 10) // Force strict integer parsing
+                    }
+                }
             });
-        }
 
-        ;
-        localStorage.setItem(storageKey, JSON.stringify(currentCart));
-        updateCart()
-        // Clear everything out only on a successful cart addition
-        setSelectedProduct(null);
-        setSearchQuery('');
-        setQuantity(1);
-        setSearchResults([]);
-        setGroupedProducts([]);
+            // 2. Clear everything out only on a SUCCESSFUL network completion response
+            setSelectedProduct(null);
+            setSearchQuery('');
+            setQuantity(1);
+            setSearchResults([]);
+            //setGroupedProducts([]);
+
+            // Optional: Trigger your clean global toast success notification here!
+            // toast.success(`Successfully added ${quantity} units to ${selectedProduct.itemName}`);
+
+        } catch (err: any) {
+            console.error("Failed to execute inventory increment:", err.message);
+            // toast.error("Stock update failed. Please try again.");
+        }
     };
 
 
@@ -276,77 +261,16 @@ export const ManualRestockTab = ({ shopId, updateCart }: ManualSearchTabProps) =
                     )}
                 </div>
 
-                {/* Selling Price */}
-                <div className="flex flex-col gap-1.5">
-                    <label className="block text-sm font-semibold text-text-sub">Selling Price</label>
-                    <input
-                        type="text"
-                        value={selectedProduct ? `₱${selectedProduct.sellingPrice.toFixed(2)}` : '₱0.00'}
-                        readOnly
-                        className="w-full px-3 py-2 border border-border-main rounded-lg bg-bg-primary opacity-70"
-                    />
-                </div>
-
-                {/* Available Stock */}
-                <div className="flex flex-col gap-1.5">
-                    <label className="block text-sm font-semibold text-text-sub">Available Stock</label>
-                    <input
-                        type="text"
-                        value={selectedProduct ? selectedProduct.stockQuantity : 0}
-                        readOnly
-                        className="w-full px-3 py-2 border border-border-main rounded-lg bg-bg-primary opacity-70"
-                    />
-                </div>
-
-                {/* 🚀 Clickable Unit of Measure Dropdown Selection Component */}
-                <div className="relative flex flex-col gap-1.5 w-full">
-                    <label className="block text-sm font-semibold text-text-sub">Unit of Measure</label>
-                    <button
-                        type="button"
-                        disabled={!selectedProduct || groupedProducts.length <= 1}
-                        onClick={() => setShowUnitDropdown(!showUnitDropdown)}
-                        onBlur={() => setTimeout(() => setShowUnitDropdown(false), 200)}
-                        className="w-full px-3 py-2 flex items-center justify-between border border-border-main rounded-lg bg-bg-primary text-left focus:outline-none focus:border-brand-gold disabled:opacity-70"
-                    >
-                        <span className="truncate">
-                            {selectedProduct ? (selectedProduct.unitOfMeasure || 'Not specified') : '—'}
-                        </span>
-                        {selectedProduct && groupedProducts.length > 1 && (
-                            <ChevronDown size={16} className="text-text-sub flex-shrink-0 ml-2" />
-                        )}
-                    </button>
-
-                    {/* Unit Options Panel overlay */}
-                    {showUnitDropdown && groupedProducts.length > 0 && (
-                        <div className="absolute z-20 w-full top-full mt-1 border border-border-main rounded-lg shadow-md max-h-40 overflow-y-auto">
-                            {groupedProducts.map((variant) => (
-                                <button
-                                    key={variant.id}
-                                    type="button"
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        handleUnitSelect(variant);
-                                    }}
-                                    className={`w-full bg-bg-primary text-left px-4 py-2 text-sm hover:bg-item-hover transition-colors ${selectedProduct?.id === variant.id ? 'bg-item-hover font-semibold text-brand-gold' : ''
-                                        }`}
-                                >
-                                    {variant.unitOfMeasure || 'Not specified'}
-                                    <span className="text-sm text-text-sub ml-2">(Stock: {variant.stockQuantity})</span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
 
                 {/* Quantity to Buy Stepper Counter */}
                 <div className="flex flex-col gap-1.5">
-                    <label className="block text-sm font-semibold text-text-sub">Quantity to Buy</label>
+                    <label className="block text-sm font-semibold text-text-sub">Quantity to Add</label>
                     <div className="flex items-center gap-2">
                         <input
                             type="number"
                             value={quantity}
                             onChange={handleQuantityInputChange}
-                            disabled={!selectedProduct || selectedProduct.stockQuantity === 0}
+
                             min={selectedProduct?.stockQuantity === 0 ? 0 : 1}
                             max={selectedProduct?.stockQuantity || 0}
                             className="w-full px-4 py-2  border border-border-main rounded-lg bg-bg-primary text-text-main focus:outline-none focus:border-brand-gold disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -370,29 +294,19 @@ export const ManualRestockTab = ({ shopId, updateCart }: ManualSearchTabProps) =
                     </div>
                     {selectedProduct && (
                         <div className="text-sm text-text-sub mt-1">
-                            Max Available: {selectedProduct.stockQuantity}
+                            Current Available: {selectedProduct.stockQuantity}
                         </div>
                     )}
                 </div>
 
-                {/* Subtotal */}
-                <div className="flex flex-col gap-1.5 mt-auto">
-                    <label className="block text-sm font-semibold text-text-sub">Subtotal</label>
-                    <input
-                        type="text"
-                        value={selectedProduct ? `₱${(selectedProduct.sellingPrice * Number(quantity)).toFixed(2)}` : '₱0.00'}
-                        readOnly
-                        className="w-full px-3 py-2 border  border-border-main rounded-lg text-brand-gold font-bold bg-bg-primary opacity-70"
-                    />
-                </div>
 
                 {/* Add to Cart button */}
                 <button
                     onClick={handleAddToCart}
                     disabled={!selectedProduct || Number(quantity) <= 0}
-                    className="w-full cursor-pointer py-3 bg-brand-gold hover:bg-brand-gold-hover text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full cursor-pointer py-3 bg-brand-gold mt-auto hover:bg-brand-gold-hover text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    Add to Cart
+                    Add Item Stock
                 </button>
             </div>
 
@@ -416,7 +330,7 @@ export const ManualRestockTab = ({ shopId, updateCart }: ManualSearchTabProps) =
                             <X className="w-8 h-8 text-brand-red" />
                         )}
                     </div>
-                    <p className="mt-2 text-lg font-bold text-text-main">{modalMessage}</p>
+                    <p className="mt-2 text-lg font-bold text-text-main text-center">{modalMessage}</p>
                     {errorMessage && (
                         <p className="mt-2 text-sm text-text-sub text-center">{errorMessage}</p>
                     )}
