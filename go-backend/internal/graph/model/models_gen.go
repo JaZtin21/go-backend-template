@@ -37,6 +37,38 @@ type BusinessHoursInput struct {
 	Days      []string `json:"days"`
 }
 
+type CheckoutBatch struct {
+	ID          string               `json:"id"`
+	ShopID      string               `json:"shopId"`
+	SoldAt      string               `json:"soldAt"`
+	TotalItems  int                  `json:"totalItems"`
+	TotalCost   float64              `json:"totalCost"`
+	GrossSale   float64              `json:"grossSale"`
+	GrossProfit float64              `json:"grossProfit"`
+	Items       []*CheckoutBatchItem `json:"items"`
+}
+
+type CheckoutBatchItem struct {
+	ID              string  `json:"id"`
+	InventoryItemID string  `json:"inventoryItemId"`
+	ItemName        string  `json:"itemName"`
+	Quantity        int     `json:"quantity"`
+	CostPrice       float64 `json:"costPrice"`
+	SellingPrice    float64 `json:"sellingPrice"`
+	LineCostTotal   float64 `json:"lineCostTotal"`
+	LineSaleTotal   float64 `json:"lineSaleTotal"`
+}
+
+type CheckoutBatchItemInput struct {
+	ItemID   string `json:"itemId"`
+	Quantity int    `json:"quantity"`
+}
+
+type CheckoutCartInput struct {
+	ShopID string                    `json:"shopId"`
+	Items  []*CheckoutBatchItemInput `json:"items"`
+}
+
 type ContactDetails struct {
 	Phone   *string `json:"phone,omitempty"`
 	Email   *string `json:"email,omitempty"`

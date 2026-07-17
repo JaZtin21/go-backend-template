@@ -877,6 +877,186 @@ func (r *mutationResolver) DecrementStock(ctx context.Context, input model.Decre
 	return &item, nil
 }
 
+// CheckoutCart is the resolver for the checkoutCart field.
+func (r *mutationResolver) CheckoutCart(ctx context.Context, input model.CheckoutCartInput) (*model.CheckoutBatch, error) {
+	_, err := ensureCheckoutOwnership(ctx, r.Resolver.DB, input.ShopID)
+	if err != nil {
+		return nil, err
+	}
+	if len(graphql.GetErrors(ctx)) > 0 {
+		return nil, nil
+	}
+
+	if len(input.Items) == 0 {
+		graphql.AddError(ctx, &gqlerror.Error{
+			Message:    "bad request: checkout cart cannot be empty",
+			Extensions: map[string]interface{}{"code": "BAD_USER_INPUT"},
+		})
+		return nil, nil
+	}
+
+	tx, err := r.Resolver.DB.Begin(ctx)
+	if err != nil {
+		graphql.AddError(ctx, &gqlerror.Error{
+			Message:    "internal server error: checkout transaction start failure",
+			Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
+		})
+		return nil, nil
+	}
+	defer tx.Rollback(ctx)
+
+	seen := map[string]struct{}{}
+	inventoryByID := make(map[string]checkoutInventoryRow, len(input.Items))
+	for _, cartItem := range input.Items {
+		if cartItem == nil || cartItem.ItemID == "" || cartItem.Quantity <= 0 {
+			graphql.AddError(ctx, &gqlerror.Error{
+				Message:    "bad request: each checkout item must have a valid itemId and quantity",
+				Extensions: map[string]interface{}{"code": "BAD_USER_INPUT"},
+			})
+			return nil, nil
+		}
+		if _, ok := seen[cartItem.ItemID]; ok {
+			graphql.AddError(ctx, &gqlerror.Error{
+				Message:    fmt.Sprintf("bad request: duplicate itemId %s in checkout payload", cartItem.ItemID),
+				Extensions: map[string]interface{}{"code": "BAD_USER_INPUT"},
+			})
+			return nil, nil
+		}
+		seen[cartItem.ItemID] = struct{}{}
+
+		var row checkoutInventoryRow
+		err = tx.QueryRow(ctx, `
+			SELECT id, item_name, cost_price, selling_price, stock_quantity
+			FROM inventory_items
+			WHERE id = $1 AND shop_id = $2
+			FOR UPDATE
+		`, cartItem.ItemID, input.ShopID).Scan(
+			&row.ID,
+			&row.ItemName,
+			&row.CostPrice,
+			&row.SellingPrice,
+			&row.StockQuantity,
+		)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				graphql.AddError(ctx, &gqlerror.Error{
+					Message:    fmt.Sprintf("not found: inventory item %s does not exist in this shop", cartItem.ItemID),
+					Extensions: map[string]interface{}{"code": "NOT_FOUND"},
+				})
+				return nil, nil
+			}
+			graphql.AddError(ctx, &gqlerror.Error{
+				Message:    "internal server error: checkout item verification failure",
+				Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
+			})
+			return nil, nil
+		}
+
+		if row.StockQuantity < cartItem.Quantity {
+			graphql.AddError(ctx, &gqlerror.Error{
+				Message:    fmt.Sprintf("insufficient stock: %s only has %d remaining", row.ItemName, row.StockQuantity),
+				Extensions: map[string]interface{}{"code": "BAD_USER_INPUT"},
+			})
+			return nil, nil
+		}
+
+		inventoryByID[cartItem.ItemID] = row
+	}
+
+	var totalItems int
+	var totalCost float64
+	var grossSale float64
+	for _, cartItem := range input.Items {
+		row := inventoryByID[cartItem.ItemID]
+		totalItems += cartItem.Quantity
+		totalCost += row.CostPrice * float64(cartItem.Quantity)
+		grossSale += row.SellingPrice * float64(cartItem.Quantity)
+	}
+	grossProfit := grossSale - totalCost
+
+	var batchID string
+	var soldAt time.Time
+	err = tx.QueryRow(ctx, `
+		INSERT INTO checkout_batches (shop_id, sold_at, total_items, total_cost, gross_sale, gross_profit)
+		VALUES ($1, NOW(), $2, $3, $4, $5)
+		RETURNING id, sold_at
+	`, input.ShopID, totalItems, totalCost, grossSale, grossProfit).Scan(&batchID, &soldAt)
+	if err != nil {
+		graphql.AddError(ctx, &gqlerror.Error{
+			Message:    "internal server error: failed to create checkout batch",
+			Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
+		})
+		return nil, nil
+	}
+
+	batchItems := make([]*model.CheckoutBatchItem, 0, len(input.Items))
+	for _, cartItem := range input.Items {
+		row := inventoryByID[cartItem.ItemID]
+		lineCostTotal := row.CostPrice * float64(cartItem.Quantity)
+		lineSaleTotal := row.SellingPrice * float64(cartItem.Quantity)
+
+		var batchItemID string
+		err = tx.QueryRow(ctx, `
+			INSERT INTO checkout_batch_items (
+				checkout_batch_id, inventory_item_id, item_name, quantity,
+				cost_price, selling_price, line_cost_total, line_sale_total
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			RETURNING id
+		`, batchID, row.ID, row.ItemName, cartItem.Quantity, row.CostPrice, row.SellingPrice, lineCostTotal, lineSaleTotal).Scan(&batchItemID)
+		if err != nil {
+			graphql.AddError(ctx, &gqlerror.Error{
+				Message:    "internal server error: failed to record checkout batch item",
+				Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
+			})
+			return nil, nil
+		}
+
+		_, err = tx.Exec(ctx, `
+			UPDATE inventory_items
+			SET stock_quantity = stock_quantity - $1, updated_at = NOW()
+			WHERE id = $2
+		`, cartItem.Quantity, row.ID)
+		if err != nil {
+			graphql.AddError(ctx, &gqlerror.Error{
+				Message:    "internal server error: failed to update inventory stock",
+				Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
+			})
+			return nil, nil
+		}
+
+		batchItems = append(batchItems, &model.CheckoutBatchItem{
+			ID:              batchItemID,
+			InventoryItemID: row.ID,
+			ItemName:        row.ItemName,
+			Quantity:        cartItem.Quantity,
+			CostPrice:       row.CostPrice,
+			SellingPrice:    row.SellingPrice,
+			LineCostTotal:   lineCostTotal,
+			LineSaleTotal:   lineSaleTotal,
+		})
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		graphql.AddError(ctx, &gqlerror.Error{
+			Message:    "internal server error: checkout commit failure",
+			Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"},
+		})
+		return nil, nil
+	}
+
+	return &model.CheckoutBatch{
+		ID:          batchID,
+		ShopID:      input.ShopID,
+		SoldAt:      soldAt.Format(time.RFC3339),
+		TotalItems:  totalItems,
+		TotalCost:   totalCost,
+		GrossSale:   grossSale,
+		GrossProfit: grossProfit,
+		Items:       batchItems,
+	}, nil
+}
+
 // GetMyShops is the resolver for the getMyShops field.
 func (r *queryResolver) GetMyShops(ctx context.Context, limit int, offset int) (*model.PaginatedOwnerShops, error) {
 	// SECURITY GUARD: Enforce valid user identity state from Redis session

@@ -49,6 +49,28 @@ type ComplexityRoot struct {
 		OpenTime  func(childComplexity int) int
 	}
 
+	CheckoutBatch struct {
+		GrossProfit func(childComplexity int) int
+		GrossSale   func(childComplexity int) int
+		ID          func(childComplexity int) int
+		Items       func(childComplexity int) int
+		ShopID      func(childComplexity int) int
+		SoldAt      func(childComplexity int) int
+		TotalCost   func(childComplexity int) int
+		TotalItems  func(childComplexity int) int
+	}
+
+	CheckoutBatchItem struct {
+		CostPrice       func(childComplexity int) int
+		ID              func(childComplexity int) int
+		InventoryItemID func(childComplexity int) int
+		ItemName        func(childComplexity int) int
+		LineCostTotal   func(childComplexity int) int
+		LineSaleTotal   func(childComplexity int) int
+		Quantity        func(childComplexity int) int
+		SellingPrice    func(childComplexity int) int
+	}
+
 	ContactDetails struct {
 		Address func(childComplexity int) int
 		Email   func(childComplexity int) int
@@ -69,6 +91,7 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		AddInventoryItem    func(childComplexity int, input model.AddInventoryItemInput) int
+		CheckoutCart        func(childComplexity int, input model.CheckoutCartInput) int
 		CreatePost          func(childComplexity int, input model.CreatePostInput) int
 		CreateShop          func(childComplexity int, input model.CreateShopInput) int
 		DecrementStock      func(childComplexity int, input model.DecrementStockInput) int
@@ -269,6 +292,7 @@ type MutationResolver interface {
 	DeleteInventoryItem(ctx context.Context, itemID string) (bool, error)
 	IncrementStock(ctx context.Context, input model.IncrementStockInput) (*model.OwnerInventoryItem, error)
 	DecrementStock(ctx context.Context, input model.DecrementStockInput) (*model.OwnerInventoryItem, error)
+	CheckoutCart(ctx context.Context, input model.CheckoutCartInput) (*model.CheckoutBatch, error)
 }
 type QueryResolver interface {
 	Ping(ctx context.Context) (string, error)
@@ -332,6 +356,104 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.BusinessHours.OpenTime(childComplexity), true
+
+	case "CheckoutBatch.grossProfit":
+		if e.ComplexityRoot.CheckoutBatch.GrossProfit == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatch.GrossProfit(childComplexity), true
+	case "CheckoutBatch.grossSale":
+		if e.ComplexityRoot.CheckoutBatch.GrossSale == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatch.GrossSale(childComplexity), true
+	case "CheckoutBatch.id":
+		if e.ComplexityRoot.CheckoutBatch.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatch.ID(childComplexity), true
+	case "CheckoutBatch.items":
+		if e.ComplexityRoot.CheckoutBatch.Items == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatch.Items(childComplexity), true
+	case "CheckoutBatch.shopId":
+		if e.ComplexityRoot.CheckoutBatch.ShopID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatch.ShopID(childComplexity), true
+	case "CheckoutBatch.soldAt":
+		if e.ComplexityRoot.CheckoutBatch.SoldAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatch.SoldAt(childComplexity), true
+	case "CheckoutBatch.totalCost":
+		if e.ComplexityRoot.CheckoutBatch.TotalCost == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatch.TotalCost(childComplexity), true
+	case "CheckoutBatch.totalItems":
+		if e.ComplexityRoot.CheckoutBatch.TotalItems == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatch.TotalItems(childComplexity), true
+
+	case "CheckoutBatchItem.costPrice":
+		if e.ComplexityRoot.CheckoutBatchItem.CostPrice == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatchItem.CostPrice(childComplexity), true
+	case "CheckoutBatchItem.id":
+		if e.ComplexityRoot.CheckoutBatchItem.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatchItem.ID(childComplexity), true
+	case "CheckoutBatchItem.inventoryItemId":
+		if e.ComplexityRoot.CheckoutBatchItem.InventoryItemID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatchItem.InventoryItemID(childComplexity), true
+	case "CheckoutBatchItem.itemName":
+		if e.ComplexityRoot.CheckoutBatchItem.ItemName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatchItem.ItemName(childComplexity), true
+	case "CheckoutBatchItem.lineCostTotal":
+		if e.ComplexityRoot.CheckoutBatchItem.LineCostTotal == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatchItem.LineCostTotal(childComplexity), true
+	case "CheckoutBatchItem.lineSaleTotal":
+		if e.ComplexityRoot.CheckoutBatchItem.LineSaleTotal == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatchItem.LineSaleTotal(childComplexity), true
+	case "CheckoutBatchItem.quantity":
+		if e.ComplexityRoot.CheckoutBatchItem.Quantity == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatchItem.Quantity(childComplexity), true
+	case "CheckoutBatchItem.sellingPrice":
+		if e.ComplexityRoot.CheckoutBatchItem.SellingPrice == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CheckoutBatchItem.SellingPrice(childComplexity), true
 
 	case "ContactDetails.address":
 		if e.ComplexityRoot.ContactDetails.Address == nil {
@@ -401,6 +523,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.AddInventoryItem(childComplexity, args["input"].(model.AddInventoryItemInput)), true
+	case "Mutation.checkoutCart":
+		if e.ComplexityRoot.Mutation.CheckoutCart == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_checkoutCart_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CheckoutCart(childComplexity, args["input"].(model.CheckoutCartInput)), true
 	case "Mutation.createPost":
 		if e.ComplexityRoot.Mutation.CreatePost == nil {
 			break
@@ -1269,6 +1402,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputAddInventoryItemInput,
 		ec.unmarshalInputBusinessHoursInput,
+		ec.unmarshalInputCheckoutBatchItemInput,
+		ec.unmarshalInputCheckoutCartInput,
 		ec.unmarshalInputContactDetailsInput,
 		ec.unmarshalInputCoordinatesInput,
 		ec.unmarshalInputCreatePostInput,
@@ -1400,6 +1535,50 @@ func (ec *executionContext) childFields_BusinessHours(ctx context.Context, field
 		return ec.fieldContext_BusinessHours_days(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type BusinessHours", field.Name)
+}
+
+func (ec *executionContext) childFields_CheckoutBatch(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_CheckoutBatch_id(ctx, field)
+	case "shopId":
+		return ec.fieldContext_CheckoutBatch_shopId(ctx, field)
+	case "soldAt":
+		return ec.fieldContext_CheckoutBatch_soldAt(ctx, field)
+	case "totalItems":
+		return ec.fieldContext_CheckoutBatch_totalItems(ctx, field)
+	case "totalCost":
+		return ec.fieldContext_CheckoutBatch_totalCost(ctx, field)
+	case "grossSale":
+		return ec.fieldContext_CheckoutBatch_grossSale(ctx, field)
+	case "grossProfit":
+		return ec.fieldContext_CheckoutBatch_grossProfit(ctx, field)
+	case "items":
+		return ec.fieldContext_CheckoutBatch_items(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type CheckoutBatch", field.Name)
+}
+
+func (ec *executionContext) childFields_CheckoutBatchItem(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_CheckoutBatchItem_id(ctx, field)
+	case "inventoryItemId":
+		return ec.fieldContext_CheckoutBatchItem_inventoryItemId(ctx, field)
+	case "itemName":
+		return ec.fieldContext_CheckoutBatchItem_itemName(ctx, field)
+	case "quantity":
+		return ec.fieldContext_CheckoutBatchItem_quantity(ctx, field)
+	case "costPrice":
+		return ec.fieldContext_CheckoutBatchItem_costPrice(ctx, field)
+	case "sellingPrice":
+		return ec.fieldContext_CheckoutBatchItem_sellingPrice(ctx, field)
+	case "lineCostTotal":
+		return ec.fieldContext_CheckoutBatchItem_lineCostTotal(ctx, field)
+	case "lineSaleTotal":
+		return ec.fieldContext_CheckoutBatchItem_lineSaleTotal(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type CheckoutBatchItem", field.Name)
 }
 
 func (ec *executionContext) childFields_ContactDetails(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1860,6 +2039,20 @@ func (ec *executionContext) field_Mutation_addInventoryItem_args(ctx context.Con
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
 		func(ctx context.Context, v any) (model.AddInventoryItemInput, error) {
 			return ec.unmarshalNAddInventoryItemInput2goᚑbackendᚋinternalᚋgraphᚋmodelᚐAddInventoryItemInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_checkoutCart_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CheckoutCartInput, error) {
+			return ec.unmarshalNCheckoutCartInput2goᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutCartInput(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -2464,6 +2657,383 @@ func (ec *executionContext) _BusinessHours_days(ctx context.Context, field graph
 }
 func (ec *executionContext) fieldContext_BusinessHours_days(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("BusinessHours", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatch_id(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatch_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatch_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatch", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatch_shopId(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatch_shopId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ShopID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatch_shopId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatch", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatch_soldAt(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatch_soldAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SoldAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatch_soldAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatch", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatch_totalItems(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatch_totalItems(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TotalItems, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatch_totalItems(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatch", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatch_totalCost(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatch_totalCost(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCost, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatch_totalCost(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatch", field, false, false, errors.New("field of type Float does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatch_grossSale(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatch_grossSale(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.GrossSale, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatch_grossSale(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatch", field, false, false, errors.New("field of type Float does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatch_grossProfit(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatch_grossProfit(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.GrossProfit, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatch_grossProfit(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatch", field, false, false, errors.New("field of type Float does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatch_items(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatch_items(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Items, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.CheckoutBatchItem) graphql.Marshaler {
+			return ec.marshalNCheckoutBatchItem2ᚕᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatchItemᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatch_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CheckoutBatch",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_CheckoutBatchItem(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CheckoutBatchItem_id(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatchItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatchItem_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatchItem_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatchItem", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatchItem_inventoryItemId(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatchItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatchItem_inventoryItemId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.InventoryItemID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatchItem_inventoryItemId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatchItem", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatchItem_itemName(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatchItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatchItem_itemName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ItemName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatchItem_itemName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatchItem", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatchItem_quantity(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatchItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatchItem_quantity(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Quantity, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatchItem_quantity(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatchItem", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatchItem_costPrice(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatchItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatchItem_costPrice(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CostPrice, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatchItem_costPrice(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatchItem", field, false, false, errors.New("field of type Float does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatchItem_sellingPrice(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatchItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatchItem_sellingPrice(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SellingPrice, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatchItem_sellingPrice(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatchItem", field, false, false, errors.New("field of type Float does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatchItem_lineCostTotal(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatchItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatchItem_lineCostTotal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LineCostTotal, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatchItem_lineCostTotal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatchItem", field, false, false, errors.New("field of type Float does not have child fields"))
+}
+
+func (ec *executionContext) _CheckoutBatchItem_lineSaleTotal(ctx context.Context, field graphql.CollectedField, obj *model.CheckoutBatchItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CheckoutBatchItem_lineSaleTotal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LineSaleTotal, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CheckoutBatchItem_lineSaleTotal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CheckoutBatchItem", field, false, false, errors.New("field of type Float does not have child fields"))
 }
 
 func (ec *executionContext) _ContactDetails_phone(ctx context.Context, field graphql.CollectedField, obj *model.ContactDetails) (ret graphql.Marshaler) {
@@ -3403,6 +3973,63 @@ func (ec *executionContext) fieldContext_Mutation_decrementStock(ctx context.Con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_decrementStock_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_checkoutCart(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_checkoutCart(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CheckoutCart(ctx, fc.Args["input"].(model.CheckoutCartInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.IsAuthenticated == nil {
+					var zeroVal *model.CheckoutBatch
+					return zeroVal, errors.New("directive isAuthenticated is not implemented")
+				}
+				return ec.Directives.IsAuthenticated(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.CheckoutBatch) graphql.Marshaler {
+			return ec.marshalNCheckoutBatch2ᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatch(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_checkoutCart(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_CheckoutBatch(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_checkoutCart_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -7647,6 +8274,80 @@ func (ec *executionContext) unmarshalInputBusinessHoursInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCheckoutBatchItemInput(ctx context.Context, obj any) (model.CheckoutBatchItemInput, error) {
+	var it model.CheckoutBatchItemInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"itemId", "quantity"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "itemId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("itemId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ItemID = data
+		case "quantity":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("quantity"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Quantity = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCheckoutCartInput(ctx context.Context, obj any) (model.CheckoutCartInput, error) {
+	var it model.CheckoutCartInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"shopId", "items"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "shopId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("shopId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ShopID = data
+		case "items":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("items"))
+			data, err := ec.unmarshalNCheckoutBatchItemInput2ᚕᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatchItemInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Items = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputContactDetailsInput(ctx context.Context, obj any) (model.ContactDetailsInput, error) {
 	var it model.ContactDetailsInput
 	if obj == nil {
@@ -8479,6 +9180,152 @@ func (ec *executionContext) _BusinessHours(ctx context.Context, sel ast.Selectio
 	return out
 }
 
+var checkoutBatchImplementors = []string{"CheckoutBatch"}
+
+func (ec *executionContext) _CheckoutBatch(ctx context.Context, sel ast.SelectionSet, obj *model.CheckoutBatch) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, checkoutBatchImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CheckoutBatch")
+		case "id":
+			out.Values[i] = ec._CheckoutBatch_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "shopId":
+			out.Values[i] = ec._CheckoutBatch_shopId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "soldAt":
+			out.Values[i] = ec._CheckoutBatch_soldAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalItems":
+			out.Values[i] = ec._CheckoutBatch_totalItems(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCost":
+			out.Values[i] = ec._CheckoutBatch_totalCost(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "grossSale":
+			out.Values[i] = ec._CheckoutBatch_grossSale(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "grossProfit":
+			out.Values[i] = ec._CheckoutBatch_grossProfit(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "items":
+			out.Values[i] = ec._CheckoutBatch_items(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var checkoutBatchItemImplementors = []string{"CheckoutBatchItem"}
+
+func (ec *executionContext) _CheckoutBatchItem(ctx context.Context, sel ast.SelectionSet, obj *model.CheckoutBatchItem) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, checkoutBatchItemImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CheckoutBatchItem")
+		case "id":
+			out.Values[i] = ec._CheckoutBatchItem_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "inventoryItemId":
+			out.Values[i] = ec._CheckoutBatchItem_inventoryItemId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "itemName":
+			out.Values[i] = ec._CheckoutBatchItem_itemName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "quantity":
+			out.Values[i] = ec._CheckoutBatchItem_quantity(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "costPrice":
+			out.Values[i] = ec._CheckoutBatchItem_costPrice(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sellingPrice":
+			out.Values[i] = ec._CheckoutBatchItem_sellingPrice(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lineCostTotal":
+			out.Values[i] = ec._CheckoutBatchItem_lineCostTotal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lineSaleTotal":
+			out.Values[i] = ec._CheckoutBatchItem_lineSaleTotal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var contactDetailsImplementors = []string{"ContactDetails"}
 
 func (ec *executionContext) _ContactDetails(ctx context.Context, sel ast.SelectionSet, obj *model.ContactDetails) graphql.Marshaler {
@@ -8744,6 +9591,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "decrementStock":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_decrementStock(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "checkoutCart":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_checkoutCart(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -10540,6 +11394,70 @@ func (ec *executionContext) marshalNBusinessHours2ᚖgoᚑbackendᚋinternalᚋg
 func (ec *executionContext) unmarshalNBusinessHoursInput2ᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐBusinessHoursInput(ctx context.Context, v any) (*model.BusinessHoursInput, error) {
 	res, err := ec.unmarshalInputBusinessHoursInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNCheckoutBatch2goᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatch(ctx context.Context, sel ast.SelectionSet, v model.CheckoutBatch) graphql.Marshaler {
+	return ec._CheckoutBatch(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCheckoutBatch2ᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatch(ctx context.Context, sel ast.SelectionSet, v *model.CheckoutBatch) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CheckoutBatch(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNCheckoutBatchItem2ᚕᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatchItemᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.CheckoutBatchItem) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNCheckoutBatchItem2ᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatchItem(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNCheckoutBatchItem2ᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatchItem(ctx context.Context, sel ast.SelectionSet, v *model.CheckoutBatchItem) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CheckoutBatchItem(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNCheckoutBatchItemInput2ᚕᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatchItemInputᚄ(ctx context.Context, v any) ([]*model.CheckoutBatchItemInput, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]*model.CheckoutBatchItemInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCheckoutBatchItemInput2ᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatchItemInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCheckoutBatchItemInput2ᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutBatchItemInput(ctx context.Context, v any) (*model.CheckoutBatchItemInput, error) {
+	res, err := ec.unmarshalInputCheckoutBatchItemInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCheckoutCartInput2goᚑbackendᚋinternalᚋgraphᚋmodelᚐCheckoutCartInput(ctx context.Context, v any) (model.CheckoutCartInput, error) {
+	res, err := ec.unmarshalInputCheckoutCartInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNContactDetails2ᚖgoᚑbackendᚋinternalᚋgraphᚋmodelᚐContactDetails(ctx context.Context, sel ast.SelectionSet, v *model.ContactDetails) graphql.Marshaler {

@@ -190,6 +190,30 @@ export const DECREMENT_STOCK_MUTATION = gql`
   }
 `;
 
+export const CHECKOUT_CART_MUTATION = gql`
+  mutation CheckoutCart($input: CheckoutCartInput!) {
+    checkoutCart(input: $input) {
+      id
+      shopId
+      soldAt
+      totalItems
+      totalCost
+      grossSale
+      grossProfit
+      items {
+        id
+        inventoryItemId
+        itemName
+        quantity
+        costPrice
+        sellingPrice
+        lineCostTotal
+        lineSaleTotal
+      }
+    }
+  }
+`;
+
 /* --- QUERIES --- */
 
 export const GET_MY_SHOPS_QUERY = gql`

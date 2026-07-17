@@ -156,6 +156,28 @@ type PaginatedPublicProducts {
   hasNextPage: Boolean!
 }
 
+type CheckoutBatch {
+  id: ID!
+  shopId: ID!
+  soldAt: String!
+  totalItems: Int!
+  totalCost: Float!
+  grossSale: Float!
+  grossProfit: Float!
+  items: [CheckoutBatchItem!]!
+}
+
+type CheckoutBatchItem {
+  id: ID!
+  inventoryItemId: ID!
+  itemName: String!
+  quantity: Int!
+  costPrice: Float!
+  sellingPrice: Float!
+  lineCostTotal: Float!
+  lineSaleTotal: Float!
+}
+
 # --- INPUTS FOR MUTATIONS ---
 
 input CreateShopInput {
@@ -233,6 +255,16 @@ input DecrementStockInput {
   quantityToRemove: Int! 
 }
 
+input CheckoutBatchItemInput {
+  itemId: ID!
+  quantity: Int!
+}
+
+input CheckoutCartInput {
+  shopId: ID!
+  items: [CheckoutBatchItemInput!]!
+}
+
 input UpdateShopInput {
   shopId: ID!
   shopName: String!
@@ -289,4 +321,5 @@ extend type Mutation {
   deleteInventoryItem(itemId: ID!): Boolean! @isAuthenticated
   incrementStock(input: IncrementStockInput!): OwnerInventoryItem! @isAuthenticated
   decrementStock(input: DecrementStockInput!): OwnerInventoryItem! @isAuthenticated
+  checkoutCart(input: CheckoutCartInput!): CheckoutBatch! @isAuthenticated
 }

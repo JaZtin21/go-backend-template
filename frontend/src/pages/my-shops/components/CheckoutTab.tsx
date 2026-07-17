@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { CartItem } from "~/types/item";
 import { useMutation } from "@apollo/client/react";
-import { DECREMENT_STOCK_MUTATION } from "~/api/graphql";
+import { CHECKOUT_CART_MUTATION } from "~/api/graphql";
 import { Modal } from "~/components";
 import { Check, X, ShoppingCart, Trash2, Image as ImageIcon } from 'lucide-react';
 
@@ -11,7 +10,7 @@ interface ManualSearchTabProps {
 }
 
 export const CheckoutTab = ({ shopId, updateCart }: ManualSearchTabProps) => {
-    const [decrementStock] = useMutation(DECREMENT_STOCK_MUTATION);
+    const [checkoutCart] = useMutation(CHECKOUT_CART_MUTATION);
     const [cart, setCart] = useState<any[]>([]); // 🚀 Set to any[] to hold your nested localStorage data structure cleanly
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
@@ -68,18 +67,26 @@ export const CheckoutTab = ({ shopId, updateCart }: ManualSearchTabProps) => {
             return;
         }
         try {
-            // 🚀 FIX: access fields directly from inside item.product node elements
-            for (const item of cart) {
-                await decrementStock({
-                    variables: {
-                        input: {
-                            itemId: item.product.id,
-                            quantityToRemove: item.quantity
-                        }
+            const items = cart.map((item) => ({
+                itemId: item.product.id,
+                quantity: item.quantity,
+            }));
+
+            const result: any = await checkoutCart({
+                variables: {
+                    input: {
+                        shopId,
+                        items,
                     }
-                });
-            }
-            openModal({ isSuccess: true, message: 'Checkout successful! Stock updated.' });
+                }
+            });
+
+            const grossSale = result?.data?.checkoutCart?.grossSale;
+            openModal({
+                isSuccess: true,
+                message: 'Checkout successful! Batch sale recorded and stock updated.',
+                error: grossSale != null ? `Gross sale: ₱${Number(grossSale).toFixed(2)}` : undefined,
+            });
             setCart([]);
             localStorage.removeItem(`cart_items_${shopId}`); // Cleanly wipe storage on complete checkout parameters pass
             updateCart()
