@@ -29,6 +29,7 @@ import InventoryForm from '../components/InventoryForm';
 import { GET_SHOP_BY_ID_QUERY, GET_SHOP_DASHBOARD_METRICS_QUERY } from '~/api/graphql';
 import { updateShop } from '~/store/myShopsSlice';
 import Checkout from './Checkout';
+import Restock from './Restock';
 
 
 // ... Keep SHOP_METRICS mock data exactly the same ...
@@ -140,6 +141,11 @@ export const ShopDetailDashboard = () => {
     const handleOpenCheckoutModal = () => setIsCheckoutModalOpen(true);
 
 
+    const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
+    const handleCloseRestockModal = () => setIsRestockModalOpen(false);
+    const handleOpenRestockModal = () => setIsRestockModalOpen(true);
+
+
 
 
 
@@ -231,7 +237,7 @@ export const ShopDetailDashboard = () => {
                             </div>
                             <div className="flex flex-col">
                                 <span className="text-lg font-black text-text-sub tracking-tight">Customer spent avg. of</span>
-                                <span className="text-xs text-text-muted font-bold mt-1">{formatCurrency(averageTicketSize)} pesos</span>
+                                <span className="text-xs text-text-muted font-bold mt-2">{formatCurrency(averageTicketSize)} pesos</span>
                             </div>
                         </div>
                     </div>
@@ -382,6 +388,19 @@ export const ShopDetailDashboard = () => {
 
                 {/* 3. Manage Inventory (Subroute Navigation Anchor) */}
                 <a
+                    onClick={handleOpenRestockModal}
+                    className="flex flex-col bg-bg-primary rounded-2xl p-5 shadow-xs transition-all duration-300 hover:shadow-md hover:bg-bg-primary-hover cursor-pointer no-underline border border-transparent"
+                >
+                    <div className="w-full aspect-video bg-bg-secondary rounded-xl mb-4 shrink-0 flex items-center justify-center">
+                        <Package className="w-6 h-6 text-text-sub" />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="text-sm font-bold text-text-main text-center">Restock Items</h3>
+                    </div>
+                </a>
+
+                {/* 3. Manage Inventory (Subroute Navigation Anchor) */}
+                <a
                     onClick={() => navigate(`/my-shops/${shopId}/inventory`)}
                     className="flex flex-col bg-bg-primary rounded-2xl p-5 shadow-xs transition-all duration-300 hover:shadow-md hover:bg-bg-primary-hover cursor-pointer no-underline border border-transparent"
                 >
@@ -435,6 +454,7 @@ export const ShopDetailDashboard = () => {
             </div>
             <InventoryForm isOpen={isInventoryModalOpen} onClose={handleCloseInventoryModal} />
             <Checkout isOpen={isCheckoutModalOpen} onClose={handleCloseCheckoutModal} />
+            <Restock isOpen={isRestockModalOpen} onClose={handleCloseRestockModal} />
 
             <Modal
                 isOpen={isAddShopModalOpen}
