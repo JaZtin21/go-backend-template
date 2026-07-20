@@ -9,6 +9,7 @@ import { ImageIcon, Minus, Plus, ChevronDown, Pencil, Sparkles } from 'lucide-re
 import { ProductScannerCamera } from './ProductScannerCamera';
 import { Modal } from '~/components';
 import { X, Check, XIcon } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface ScannerTabProps {
     shopId: string
@@ -251,6 +252,7 @@ export function ScannerTab({ shopId, updateCart }: ScannerTabProps) {
         })();
 
         handleAddToCart();
+        toast.success(`${quantity} ${selectedProduct.itemName} is added to cart!`);
 
         // Only return to the camera view if the add actually succeeded
         // (handleAddToCart opens the stock-limit error modal and bails otherwise).

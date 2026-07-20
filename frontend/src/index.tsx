@@ -3,10 +3,11 @@ import { App } from './components/App'; // This will now find the App export per
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { ApolloProviderWithAuth } from './config/ApolloProviderWithAuth';
 import React from 'react';
-import { ThemeProvider, TinyBaseProvider } from '~/components';
+import { ThemeProvider, TinyBaseProvider, ResponsiveToaster } from '~/components';
 import './style.css'
 import { Provider } from 'react-redux';
 import { store } from './store/store';
+
 
 const container = document.getElementById('root') as HTMLDivElement;
 const root = createRoot(container);
@@ -18,6 +19,7 @@ root.render(
                 <TinyBaseProvider>
                     <ApolloProviderWithAuth>
                         <Provider store={store}>
+                            <ResponsiveToaster />
                             <App />
                         </Provider>
                     </ApolloProviderWithAuth>

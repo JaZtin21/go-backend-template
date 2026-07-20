@@ -5,6 +5,9 @@ import { Product } from '~/types/item';
 import { ImageIcon, Plus, Minus, ChevronDown } from 'lucide-react';
 import { Modal } from '~/components';
 import { X, Check, XIcon } from 'lucide-react';
+import { toast } from 'sonner';
+
+
 interface ManualSearchTabProps {
     shopId: string;
     updateCart: () => void
@@ -168,6 +171,7 @@ export const ManualSearchTab = ({ shopId, updateCart }: ManualSearchTabProps) =>
         ;
         localStorage.setItem(storageKey, JSON.stringify(currentCart));
         updateCart()
+        toast.success(`${quantity} ${selectedProduct.itemName} is added to cart!`);
         // Clear everything out only on a successful cart addition
         setSelectedProduct(null);
         setSearchQuery('');
