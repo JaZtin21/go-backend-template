@@ -1,14 +1,8 @@
 import React, { useEffect, useMemo, useState, createContext, useContext, useRef, useCallback } from 'react';
-import { ApolloClient, InMemoryCache, ApolloLink, HttpLink, gql, Observable } from '@apollo/client';
+import { gql } from '@apollo/client';
 import { ApolloProvider } from '@apollo/client/react';
-import { SetContextLink } from '@apollo/client/link/context';
-import { ErrorLink } from '@apollo/client/link/error';
-import { CombinedGraphQLErrors } from '@apollo/client/errors';
-import { GraphQLWsLink } from '@apollo/client/link/subscriptions';
-import { createClient } from 'graphql-ws';
-import { getMainDefinition } from '@apollo/client/utilities';
 import { useGoogleLogin } from '@react-oauth/google';
-import { createUploadLink } from '~/api/graphql';
+import client, { authLinkClient, setAuthToken, setRefreshHandler } from './apolloClient';
 
 // =========================================================================
 // 1. EMBEDDED GRAPHQL SCHEMAS & QUERIES (Ground-Truth Contracts)
@@ -51,19 +45,7 @@ export const LOGOUT_MUTATION = gql`
 `;
 
 // =========================================================================
-// 2. CONFIGURATIONS & NETWORK ENDPOINTS
-// =========================================================================
-
-const GRAPHQL_ENDPOINT = import.meta.env.VITE_GRAPHQL_ENDPOINT || 'http://localhost:8080/query';
-const GRAPHQL_WS_ENDPOINT = GRAPHQL_ENDPOINT.replace(/^http/, 'ws');
-
-const authLinkClient = new ApolloClient({
-    link: new HttpLink({ uri: GRAPHQL_ENDPOINT, credentials: 'include' }),
-    cache: new InMemoryCache(),
-});
-
-// =========================================================================
-// 3. CORE STRUCTURAL TYPE DEFINITIONS
+// 2. CORE STRUCTURAL TYPE DEFINITIONS
 // =========================================================================
 
 export interface UserInfo {
@@ -84,7 +66,7 @@ export interface AuthContextType {
 }
 
 // =========================================================================
-// 4. REACT CONTEXT HOOK ENTRY LAYER
+// 3. REACT CONTEXT HOOK ENTRY LAYER
 // =========================================================================
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -98,7 +80,13 @@ export const useAuth = () => {
 };
 
 // =========================================================================
-// 5. PROVIDER WRAPPER ENGINE
+// 4. PROVIDER WRAPPER ENGINE
+//
+// NOTE: this component no longer builds the ApolloClient itself. The client
+// now lives in apolloClient.ts as a module-level singleton (so syncEngine.ts
+// and other non-React code can use it too). This component's only job re:
+// Apollo is to keep that singleton's auth state in sync via setAuthToken()
+// / setRefreshHandler(), and to render <ApolloProvider client={client}>.
 // =========================================================================
 
 export const ApolloProviderWithAuth = ({ children }: { children: React.ReactNode }) => {
@@ -113,6 +101,7 @@ export const ApolloProviderWithAuth = ({ children }: { children: React.ReactNode
 
     useEffect(() => {
         jwtRef.current = jwt;
+        setAuthToken(jwt); // keep apolloClient.ts's module-level token in sync
     }, [jwt]);
 
     const logoutAndClear = useCallback(async () => {
@@ -128,6 +117,7 @@ export const ApolloProviderWithAuth = ({ children }: { children: React.ReactNode
         setIsAuthenticated(false);
         setJwt('');
         jwtRef.current = '';
+        setAuthToken('');
         setUserInfo(null);
     }, []);
 
@@ -147,6 +137,7 @@ export const ApolloProviderWithAuth = ({ children }: { children: React.ReactNode
                 if (refreshedData?.accessToken && refreshedData?.user) {
                     setJwt(refreshedData.accessToken);
                     jwtRef.current = refreshedData.accessToken;
+                    setAuthToken(refreshedData.accessToken);
                     setUserInfo(refreshedData.user);
                     setIsAuthenticated(true);
                     return refreshedData.accessToken;
@@ -164,6 +155,12 @@ export const ApolloProviderWithAuth = ({ children }: { children: React.ReactNode
 
         return refreshPromiseRef.current;
     }, [logoutAndClear]);
+
+    // Register the refresh handler with apolloClient.ts as soon as we have a
+    // stable reference to it, so centralErrorLink can call it on 401s.
+    useEffect(() => {
+        setRefreshHandler(executeSilentRefreshSession);
+    }, [executeSilentRefreshSession]);
 
     useEffect(() => {
         const initializeSessionState = async () => {
@@ -201,6 +198,7 @@ export const ApolloProviderWithAuth = ({ children }: { children: React.ReactNode
                 if (authResponse?.accessToken && authResponse?.user) {
                     setJwt(authResponse.accessToken);
                     jwtRef.current = authResponse.accessToken;
+                    setAuthToken(authResponse.accessToken);
                     setUserInfo(authResponse.user);
                     setIsAuthenticated(true);
                 } else {
@@ -219,104 +217,6 @@ export const ApolloProviderWithAuth = ({ children }: { children: React.ReactNode
         }
     });
 
-    const clientInstance = useMemo(() => {
-        const httpUploadLink = createUploadLink({
-            uri: GRAPHQL_ENDPOINT,
-            credentials: 'include'
-        });
-
-        // v4: SetContextLink takes (prevContext, operation) — args flipped
-        // vs. the old deprecated setContext((operation, prevContext) => ...).
-        const authInterceptorLink = new SetContextLink((prevContext) => ({
-            headers: {
-                ...prevContext.headers,
-                Authorization: jwtRef.current ? `Bearer ${jwtRef.current}` : '',
-            }
-        }));
-
-        // v4: ErrorLink class replaces the deprecated onError() function.
-        // Handler still receives { error, operation, forward }; `error` is
-        // narrowed via CombinedGraphQLErrors.is(error) to get `.errors`.
-        const centralErrorLink = new ErrorLink(({ error, operation, forward }) => {
-            let shouldRetry = false;
-
-            if (CombinedGraphQLErrors.is(error)) {
-                for (const err of error.errors) {
-                    console.log('[ApolloProvider] GraphQLError intercepted:', err);
-                    if (
-                        err.extensions?.code === 'TOKEN_EXPIRED' ||
-                        err.extensions?.code === 'UNAUTHENTICATED'
-                    ) {
-                        shouldRetry = true;
-                    }
-                }
-            }
-
-            if (!shouldRetry) return;
-
-            const hasRetried = operation.getContext().hasRetried || false;
-            if (hasRetried) {
-                console.warn('[ApolloProvider] Already retried this operation once, not retrying again.');
-                return;
-            }
-
-            return new Observable<any>((observer) => {
-                executeSilentRefreshSession()
-                    .then((freshToken) => {
-                        if (!freshToken) {
-                            observer.error(error);
-                            return;
-                        }
-                        operation.setContext(({ headers = {} }: any) => ({
-                            headers: {
-                                ...headers,
-                                Authorization: `Bearer ${freshToken}`,
-                            },
-                            hasRetried: true,
-                        }));
-                        const retrySubscription = forward(operation).subscribe({
-                            next: observer.next.bind(observer),
-                            error: observer.error.bind(observer),
-                            complete: observer.complete.bind(observer),
-                        });
-                        return () => retrySubscription.unsubscribe();
-                    })
-                    .catch((err) => observer.error(err));
-            });
-        });
-
-        const subscriptionWsLink = new GraphQLWsLink(
-            createClient({
-                url: GRAPHQL_WS_ENDPOINT,
-                connectionParams: () => ({
-                    headers: {
-                        Authorization: jwtRef.current ? `Bearer ${jwtRef.current}` : '',
-                    }
-                }),
-            })
-        );
-
-        // v4: ApolloLink.split(...) and ApolloLink.from([...]) are static
-        // methods on ApolloLink, replacing the deprecated standalone
-        // `split` and `from` exports.
-        const transportSplitLink = ApolloLink.split(
-            ({ query }) => {
-                const nodeDefinition = getMainDefinition(query);
-                return (
-                    nodeDefinition.kind === 'OperationDefinition' &&
-                    nodeDefinition.operation === 'subscription'
-                );
-            },
-            subscriptionWsLink,
-            ApolloLink.from([centralErrorLink, authInterceptorLink, httpUploadLink])
-        );
-
-        return new ApolloClient({
-            link: transportSplitLink,
-            cache: new InMemoryCache(),
-        });
-    }, [executeSilentRefreshSession]);
-
     if (isLoading) {
         return (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'sans-serif', background: '#fafafa' }}>
@@ -330,7 +230,7 @@ export const ApolloProviderWithAuth = ({ children }: { children: React.ReactNode
 
     return (
         <AuthContext.Provider value={{ isAuthenticated, userInfo, jwt, googleLoginTrigger, logoutAndClear, isLoading }}>
-            <ApolloProvider client={clientInstance}>
+            <ApolloProvider client={client}>
                 {children}
             </ApolloProvider>
         </AuthContext.Provider>

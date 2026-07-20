@@ -4,6 +4,7 @@ import { ArrowLeft, ClipboardList, ReceiptText } from 'lucide-react';
 import { useQuery } from '@apollo/client/react';
 import { GET_CHECKOUT_HISTORY_QUERY, GET_ITEM_ACTION_HISTORY_QUERY } from '~/api/graphql';
 import type { CheckoutHistoryBatch, ItemActionHistoryRecord } from '~/types';
+import { useShopInventory, useCheckoutHistory, useItemActionHistory } from '~/api/queries';
 
 interface CheckoutHistoryResponse {
   getCheckoutHistory: {
@@ -29,18 +30,24 @@ export const SalesHistoryPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'checkout' | 'actions'>('checkout');
   const [checkoutOffset, setCheckoutOffset] = useState(0);
   const [actionsOffset, setActionsOffset] = useState(0);
+  const isSubscribed = false;
 
-  const checkoutQuery = useQuery(GET_CHECKOUT_HISTORY_QUERY, {
-    variables: { shopId, limit: PAGE_LIMIT, offset: checkoutOffset },
-    skip: !shopId || activeTab !== 'checkout',
-    fetchPolicy: 'no-cache',
-  }) as { loading: boolean; error: any; data?: CheckoutHistoryResponse };
+  const checkoutQuery = useCheckoutHistory({
+    shopId: shopId || '',
+    offset: checkoutOffset,
+    pageLimit: PAGE_LIMIT,     // 👈 Flattened and renamed from limit
+    activeTab: activeTab,      // 👈 Required property passed directly
+    isSubscribed: isSubscribed,
+  })
 
-  const itemActionsQuery = useQuery(GET_ITEM_ACTION_HISTORY_QUERY, {
-    variables: { shopId, limit: PAGE_LIMIT, offset: actionsOffset },
-    skip: !shopId || activeTab !== 'actions',
-    fetchPolicy: 'no-cache',
-  }) as { loading: boolean; error: any; data?: ItemActionHistoryResponse };
+  const itemActionsQuery = useItemActionHistory({
+    shopId: shopId || '',
+    offset: actionsOffset,
+    pageLimit: PAGE_LIMIT,     // 👈 Flattened and renamed from limit
+    activeTab: activeTab,      // 👈 Required property passed directly
+    isSubscribed: isSubscribed,
+  })
+
 
   const checkoutData = checkoutQuery.data?.getCheckoutHistory;
   const actionData = itemActionsQuery.data?.getItemActionHistory;

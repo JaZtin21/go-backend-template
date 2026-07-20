@@ -29,6 +29,10 @@ export function createShopStore(): Store {
             updatedAt: { type: 'string' },
             createdBy: { type: 'string' },
             status: { type: 'string' },
+            // --- sync tracking ---
+            _dirty: { type: 'boolean', default: false }, // edited offline, not yet pushed
+            _serverSynced: { type: 'boolean', default: false }, // has ever reached the backend
+            _deleted: { type: 'boolean', default: false }, // soft-deleted offline, needs deleting on server too
         },
         inventory: {
             shopId: { type: 'string' },
@@ -43,19 +47,30 @@ export function createShopStore(): Store {
             costPrice: { type: 'number' },
             reorderLevel: { type: 'number' },
             updatedAt: { type: 'string' },
+            _dirty: { type: 'boolean', default: false },
+            _serverSynced: { type: 'boolean', default: false },
+            _deleted: { type: 'boolean', default: false },
         },
         checkoutHistory: {
             shopId: { type: 'string' },
-            itemsJson: { type: 'string' }, // CartItem[]
-            total: { type: 'number' },
-            createdAt: { type: 'string' },
+            soldAt: { type: 'string' },
+            totalItems: { type: 'number' },
+            totalCost: { type: 'number' },
+            grossSale: { type: 'number' },
+            grossProfit: { type: 'number' },
+            itemsJson: { type: 'string' }, // [{ id, inventoryItemId, itemName, quantity, costPrice, sellingPrice, lineCostTotal, lineSaleTotal }]
+            _dirty: { type: 'boolean', default: false },
+            _serverSynced: { type: 'boolean', default: false },
+            _deleted: { type: 'boolean', default: false },
         },
         itemActionHistory: {
             shopId: { type: 'string' },
-            itemId: { type: 'string' },
-            action: { type: 'string' }, // 'add' | 'update' | 'delete' | 'increment_stock'
-            performedBy: { type: 'string' },
-            createdAt: { type: 'string' },
+            inventoryItemId: { type: 'string' },
+            itemName: { type: 'string' },
+            action: { type: 'string' },
+            quantity: { type: 'number' },
+            date: { type: 'string' },
+            _serverSynced: { type: 'boolean', default: false }, // pull-only: server generates these as a side effect of other mutations
         },
     });
 }

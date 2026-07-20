@@ -33,37 +33,6 @@ import Restock from './Restock';
 import { useShopById, useShopDashboardMetrics } from "~/api/queries";
 
 
-// ... Keep SHOP_METRICS mock data exactly the same ...
-const SHOP_METRICS = {
-    id: "1",
-    name: "Downtown Coffee & Bakery",
-    stats: {
-        todaySales: "$1,240.00",
-        growthRate: "+12.4%",
-        activeOrders: 14,
-    },
-    // Raw numerical percentages to map dynamic progress tracking fills
-    progressMetrics: {
-        todayLiftPct: 53,
-        weeklyTargetPct: 78,
-        liveOrdersPct: 35,
-        marketHealthPct: 65
-    },
-    // Functional layout clusters mapping historical timeline trends to the multi-column bar layout
-    comparisonBars: [
-        { name: 'Cluster A', actual: 60, target: 80, projected: 100 },
-        { name: 'Cluster B', actual: 75, target: 60, projected: 90 }
-    ],
-    chartData: [
-        { day: 'Mon', sales: 400 },
-        { day: 'Tue', sales: 700 },
-        { day: 'Wed', sales: 600 },
-        { day: 'Thu', sales: 900 },
-        { day: 'Fri', sales: 1240 },
-        { day: 'Sat', sales: 1100 },
-        { day: 'Sun', sales: 1300 },
-    ]
-};
 export const ShopDetailDashboard = () => {
 
     const { id } = useParams<{ id: string }>();

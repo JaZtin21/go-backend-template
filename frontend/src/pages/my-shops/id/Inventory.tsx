@@ -14,6 +14,7 @@ import InventoryForm from '../components/InventoryForm';
 import type { Item } from '~/types';
 import { Modal } from '~/components';
 import { X, Check, TriangleAlert } from 'lucide-react';
+import { useShopInventory } from '~/api/queries';
 
 // Generic debounce hook: returns a debounced copy of `value` that only
 // updates after `delay` ms have passed without `value` changing again.
@@ -32,6 +33,7 @@ export const InventoryPage = () => {
     const { shopId } = useParams<{ shopId: string }>();
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const isSubscribed = false
 
     // 1. PAGINATION SETUP: 10 items per page limit matrix footprint
     const itemsPerPage = 10;
@@ -48,20 +50,15 @@ export const InventoryPage = () => {
     const debouncedSortBy = useDebouncedValue(sortBy, 300);
     const debouncedSortOrder = useDebouncedValue(sortOrder, 300);
 
-    // 3. RUN APOLLO FETCH QUERY
-    const { loading: isLoading, error, data } = useQuery(GET_SHOP_INVENTORY_QUERY, {
-        variables: {
-            shopId: shopId,
-            limit: itemsPerPage,
-            offset: offset,
-            search: debouncedSearchQuery || undefined,
-            sortBy: debouncedSortBy || undefined,
-            sortOrder: debouncedSortOrder || undefined
-        },
-        fetchPolicy: 'no-cache',
-        skip: !shopId
-    }) as { loading: boolean; error: any; data: { getShopInventory: { items: Item[]; totalCount: number } } };
-
+    const { loading: isLoading, error, data } = useShopInventory({
+        shopId: shopId || '',
+        offset: offset,
+        itemsPerPage: 10, // 👈 Required field missing in your original code
+        isSubscribed: isSubscribed, // 👈 Required field missing in your original code
+        search: debouncedSearchQuery || undefined,
+        sortBy: debouncedSortBy || undefined,
+        sortOrder: debouncedSortOrder || undefined,
+    })
 
     const [tableLoading, setTableLoading] = useState(isLoading);
     const loadingOffTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

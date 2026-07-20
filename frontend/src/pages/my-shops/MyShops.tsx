@@ -15,6 +15,7 @@ import { DELETE_SHOP_MUTATION } from '~/api/graphql';
 import { Check, TriangleAlert, X } from 'lucide-react';
 import { deleteShop as deleteShopAction } from '~/store/myShopsSlice';
 import { useMyShops, useDeleteShop } from "~/api/queries";
+import { SyncButton } from '~/components';
 
 interface GetMyShopsResponse {
     getMyShops: {
@@ -29,14 +30,14 @@ export const MyShops: React.FC = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const isAddShopModalOpen = useSelector((state: RootState) => state.ui.isAddShopModalOpen);
-    const isSubscribed = false
+    const isSubscribed = true
 
     // PAGINATION SETUP: 10 items per page limit matrix footprint
     const PAGE_LIMIT = 10;
     const [offset, setOffset] = useState<number>(0);
 
     // 1. RUN APOLLO FETCH QUERY (Types inferred automatically via type inference)
-    const { loading: isLoading, error, data } = useMyShops({ limit: PAGE_LIMIT, offset, isSubscribed: false });
+    const { loading: isLoading, error, data } = useMyShops({ limit: PAGE_LIMIT, offset, isSubscribed: isSubscribed });
 
     // 2. READ DIRECTLY FROM REDUX STORAGE CACHE FOR VIEW TRANSFORMS
     const loadedShops = useSelector((state: RootState) => state.myShops.shops);
@@ -141,6 +142,7 @@ export const MyShops: React.FC = () => {
 
     return (
         <>
+            <SyncButton isSubscribed={isSubscribed} />
             <div className="w-full min-h-screen pb-10">
 
                 {/* 3. ERROR HANDLER BOUNDARY SAFEGUARD SUB-TRACK */}

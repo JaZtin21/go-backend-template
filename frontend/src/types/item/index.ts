@@ -8,7 +8,7 @@ export interface Item {
   barcode?: string;
   category?: string;
   unitOfMeasure?: string;
-  photo?: string;
+  photo?: string | File | null;
   sellingPrice: number;
   stockQuantity: number;
   costPrice: number;

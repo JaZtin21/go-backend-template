@@ -12,6 +12,7 @@ import {
 } from "~/store/inventorySlice";
 import { Check, X, XIcon } from 'lucide-react';
 import { ProductScannerCamera } from './ProductScannerCamera';
+import { useAddInventoryItem, useUpdateInventoryItem } from '~/api/queries';
 
 export default function InventoryForm({ isOpen, onClose, data }: { isOpen: boolean, onClose: () => void, data?: any }) {
 
@@ -24,6 +25,8 @@ export default function InventoryForm({ isOpen, onClose, data }: { isOpen: boole
     const { id: shopId } = useParams();
     const [photo, setPhoto] = useState<File | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string>(typeof item?.photo === 'string' ? item.photo : '');
+    const isSubscribed = false;
+
 
 
 
@@ -152,14 +155,13 @@ export default function InventoryForm({ isOpen, onClose, data }: { isOpen: boole
 
     }
 
-    const [addInventoryItem, { loading: isAddingItem }] = useMutation(ADD_INVENTORY_ITEM_MUTATION, {
+    const [addInventoryItem, { loading: isAddingItem }] = useAddInventoryItem({
         refetchQueries: ['GetShopInventory'],
+        isSubscribed: isSubscribed,
         onCompleted: (data: any) => {
-            // 👇 DISPATCH THE RESPONSE DATA OBJECT DIRECTLY TO REDUX INSTANTLY
             if (data?.addInventoryItem) {
                 dispatch(addInventoryItemAction(data.addInventoryItem));
             }
-
             handleCloseInventoryModal(false);
             openModal({ isSuccess: true, type: 'add' });
         },
@@ -169,22 +171,22 @@ export default function InventoryForm({ isOpen, onClose, data }: { isOpen: boole
         }
     });
 
-    const [updateInventoryItem, { loading: isUpdatingItem }] = useMutation(UPDATE_INVENTORY_ITEM_MUTATION, {
+    const [updateInventoryItem, { loading: isUpdatingItem }] = useUpdateInventoryItem({
         refetchQueries: ['GetShopInventory'],
+        isSubscribed: isSubscribed,
         onCompleted: (data: any) => {
-            // 👇 DISPATCH THE RESPONSE DATA OBJECT DIRECTLY TO REDUX INSTANTLY
             if (data?.updateInventoryItem) {
                 dispatch(updateInventoryItemAction(data.updateInventoryItem));
             }
-
             handleCloseInventoryModal();
             openModal({ isSuccess: true, type: 'update' });
         },
         onError: (err) => {
             console.error("Mutation failed to run:", err);
-            openModal({ isSuccess: false, type: 'add', error: err.message });
+            openModal({ isSuccess: false, type: 'update', error: err.message }); // 👈 Fixed 'add' typo to 'update'
         }
-    })
+    });
+
 
     const isLoading = isAddingItem || isUpdatingItem;
     // Process local submit variables for your backend mutation structure
@@ -222,6 +224,7 @@ export default function InventoryForm({ isOpen, onClose, data }: { isOpen: boole
                 };
                 updateInventoryItem({
                     variables: {
+                        itemId: item.id,
                         input: updateInput
                     }
                 });
@@ -272,35 +275,6 @@ export default function InventoryForm({ isOpen, onClose, data }: { isOpen: boole
         }
         return () => stopCamera();
     }, [activeTab, scannerStep]);
-
-    const handleCameraCapture = () => {
-        if (!videoRef.current) return;
-
-        const video = videoRef.current;
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth || 480;
-        canvas.height = video.videoHeight || 640;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        canvas.toBlob((blob) => {
-            if (!blob) return;
-
-            const capturedFile = new File([blob], `scan_${Date.now()}.jpg`, { type: 'image/jpeg' });
-
-            // Lock the image binary file and preview string instantly
-            setPhoto(capturedFile);
-            setPhotoPreview(URL.createObjectURL(capturedFile));
-
-            // Shut off the lens and advance smoothly to Step 2
-            stopCamera();
-            setScannerStep('form');
-            setFormData({ ...formData, itemName: 'name here ' });
-        }, 'image/jpeg', 0.85);
-    };
 
     const handleGoBackToCamera = () => {
         setPhoto(null);
