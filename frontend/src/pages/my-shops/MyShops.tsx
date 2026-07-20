@@ -12,7 +12,7 @@ import type { Shop } from '~/types/shop';
 import { Plus, Store } from 'lucide-react';
 import { useMutation } from '@apollo/client/react';
 import { DELETE_SHOP_MUTATION } from '~/api/graphql';
-import { Check, TriangleAlert, X } from 'lucide-react';
+import { Check, TriangleAlert, X, Trash2 } from 'lucide-react';
 import { deleteShop as deleteShopAction } from '~/store/myShopsSlice';
 import { useMyShops, useDeleteShop } from "~/api/queries";
 import { SyncButton } from '~/components';
@@ -167,9 +167,9 @@ export const MyShops: React.FC = () => {
                                     <div className="h-4 w-1/2 bg-bg-secondary rounded-md" />
                                     <div className="h-3 w-3/4 bg-bg-secondary rounded-md" />
                                 </div>
-                                <div className="flex items-center justify-end gap-2.5 w-full">
-                                    <div className="h-8 w-16 bg-bg-secondary rounded-lg" />
-                                    <div className="h-8 w-16 bg-bg-secondary rounded-lg" />
+                                <div className="flex items-center justify-center gap-2.5 w-full">
+                                    <div className="h-8 w-16 bg-bg-secondary rounded-lg w-full" />
+
                                 </div>
                             </div>
                         ))
@@ -193,54 +193,62 @@ export const MyShops: React.FC = () => {
                             <div
                                 key={shop.id}
                                 onClick={() => navigate(`/my-shops/${shop.id}`)}
-                                className="flex flex-col bg-bg-primary rounded-2xl p-5 shadow-xs transition-all duration-300  hover:bg-bg-primary-hover/40 cursor-pointer"
+                                className="group flex flex-col bg-bg-primary rounded-2xl shadow-xs transition-all duration-300 hover:shadow-md cursor-pointer overflow-hidden relative aspect-square w-full"
                             >
-                                {/* Square Core Image Asset Representation Box */}
-                                <div className="w-full aspect-square bg-bg-secondary rounded-xl mb-4 shrink-0 overflow-hidden relative">
+                                {/* 1. Core Background Image Asset */}
+                                <div className="absolute inset-0 w-full h-full shrink-0 z-0">
                                     {shop.photo ? (
                                         <img
                                             src={typeof shop?.photo === 'string' ? shop.photo : ''}
                                             alt={shop.shopName}
-                                            className="w-full h-full object-cover"
+                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                         />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-text-muted text-xs font-semibold bg-bg-secondary-hover">No Cover Photo</div>
+                                        <div className="w-full h-full flex items-center justify-center text-text-muted text-xs font-semibold bg-bg-secondary-hover">
+                                            No Cover Photo
+                                        </div>
                                     )}
                                 </div>
 
-                                {/* Text Layout Metadata Labels */}
-                                <div className="flex-1 mb-6">
-                                    <h3 className="text-sm font-bold text-text-main mb-1 truncate">
-                                        {shop.shopName}
-                                    </h3>
-                                    <p className="text-xs font-medium text-text-muted line-clamp-2">
-                                        {shop.address}
-                                    </p>
-                                </div>
+                                {/* 2. Top Right Destructive Action (Delete Button) */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenDeletePrompt(shop.id!)
+                                    }}
+                                    className="absolute top-3 right-3 z-20 h-7 px-0.5 rounded-lg bg-brand-red/70 border-2 border-brand-red hover:bg-brand-red-hover active:scale-95 transition-all text-[11px] font-bold text-text-white cursor-pointer"
+                                >
+                                    <Trash2 className="h-5 w-5" />
+                                </button>
 
-                                {/* ACTIONS ACTION BUTTON STRIP FOOTPRINT GROUP */}
-                                <div className="flex items-center justify-end gap-2.5 w-full">
+                                {/* 3. Dark Bottom Gradient Shadow Vignette */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10 pointer-events-none" />
+
+                                {/* 4. Bottom Content Card Layout Wrap */}
+                                <div className="absolute bottom-0 inset-x-0 p-8 z-20 flex flex-col gap-3">
+                                    {/* Text Information Metadata Labels */}
+                                    <div className="w-full mb-2">
+                                        <h3 className="text-md font-bold text-text-white mb-0.5 truncate">
+                                            {shop.shopName}
+                                        </h3>
+                                        <p className="text-sm font-medium text-text-sub-white line-clamp-2">
+                                            {shop.address}
+                                        </p>
+                                    </div>
+
+                                    {/* Primary Single Stretched Action Control Target */}
                                     <button
                                         onClick={(e) => {
-                                            e.stopPropagation(); // Block card element click routing action bypasses
-                                            handleOpenDeletePrompt(shop.id!)
-                                        }}
-                                        className="h-8 rounded-lg bg-brand-red hover:bg-brand-red-hover active:scale-98 transition-all px-4 text-xs font-bold text-text-white cursor-pointer border border-transparent"
-                                    >
-                                        Delete
-                                    </button>
-
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation(); // 🟢 THE FIX: Add this line to kill the double history push!
+                                            e.stopPropagation();
                                             navigate(`/my-shops/${shop.id}`);
                                         }}
-                                        className="h-8 rounded-lg bg-brand-gold hover:bg-brand-gold-hover active:scale-98 transition-all px-4 text-xs font-bold text-text-white cursor-pointer border border-transparent"
+                                        className="w-full h-9 backdrop-blur-sm rounded-full bg-bg-primary dark:bg-bg-secondary hover:bg-bg-primary-hover active:scale-98 transition-all text-xs font-bold text-text-main cursor-pointer flex items-center justify-center "
                                     >
                                         Manage
                                     </button>
                                 </div>
                             </div>
+
                         ))
                     )}
                     <div className={`flex ${loadedShops.length === 0 ? "hidden" : ""} flex-col align-center p-9 text-center justify-center bg-bg-primary rounded-2xl shadow-xs transition-shadow hover:shadow-sm`}>
