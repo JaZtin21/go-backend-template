@@ -47,7 +47,7 @@ export default function Checkout({ isOpen, onClose }: { isOpen: boolean, onClose
                 title='Checkout'
                 subtitle=''
                 customHeader={
-                    <div className="flex items-center px-2 py-6">
+                    <div className="flex items-center px-3 py-6">
                         <button
                             onClick={onClose}
                             className="p-1.5 text-text-sub hover:text-text-main hover:bg-item-hover z-1 rounded-lg transition-colors cursor-pointer shrink-0"
@@ -62,7 +62,7 @@ export default function Checkout({ isOpen, onClose }: { isOpen: boolean, onClose
                         <div className="relative p-1.5 cursor-pointer" onClick={() => setActiveTab('checkout')}>
                             <ShoppingCart size={20} className="text-text-sub" />
                             {cart.length > 0 && (
-                                <span className="absolute -top-1 right-2 bg-brand-gold text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                                <span className="absolute -top-1 right-3 bg-brand-gold text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center">
                                     {cart.length}
                                 </span>
                             )}

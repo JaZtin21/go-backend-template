@@ -4,7 +4,8 @@ import { CHECKOUT_CART_MUTATION, GET_SHOP_DASHBOARD_METRICS_QUERY } from "~/api/
 import { Modal } from "~/components";
 import { Check, X, ShoppingCart, Trash2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAddInventoryItem, useUpdateInventoryItem, useCheckoutCart } from '~/api/queries';
+import { useCheckoutCart } from '~/api/queries';
+import { Plus, Minus } from 'lucide-react'
 
 
 
@@ -120,6 +121,27 @@ export const CheckoutTab = ({ shopId, updateCart }: ManualSearchTabProps) => {
             openModal({ isSuccess: false, message: 'Checkout failed', error: err.message });
         }
     };
+
+    const updateQuantity = (productId: string, newQuantity: number) => {
+        // Find the item to check its maximum available stock limit boundary
+        const targetItem = cart.find(item => item.product.id === productId);
+        if (!targetItem) return;
+
+        // Enforce boundary safety thresholds (minimum 1, maximum available stock)
+        const maxStock = targetItem.product.stockQuantity ?? Infinity;
+        const sanitizedQuantity = Math.max(1, Math.min(newQuantity, maxStock));
+
+        const updatedCart = cart.map(item =>
+            item.product.id === productId
+                ? { ...item, quantity: sanitizedQuantity }
+                : item
+        );
+
+        setCart(updatedCart);
+        localStorage.setItem(`cart_items_${shopId}`, JSON.stringify(updatedCart));
+        updateCart(); // Sync metrics instantly with parent layout structures
+    };
+
     return (
         // 🚀 Absolute-boundary tracking container parent enforces strict layout clipping bounds
         <div className="absolute inset-0 flex flex-col w-full h-full p-0 m-0 overflow-hidden min-h-0 ">
@@ -175,11 +197,37 @@ export const CheckoutTab = ({ shopId, updateCart }: ManualSearchTabProps) => {
                                                     {product.unitOfMeasure && (
                                                         <p className="text-xs text-text-sub">{product.unitOfMeasure}</p>
                                                     )}
-                                                    <div className="flex justify-between  ">
-                                                        <div className="text-sm">
-                                                            <span className="text-text-sub mr-2">Quantity:</span>
-                                                            <span className="font-semibold text-text-main">{item.quantity}</span>
+                                                    <div className="flex justify-between items-center mt-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-sm text-text-sub">Quantity:</span>
+                                                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                                {/* Decrement Button */}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => updateQuantity(product.id, item.quantity - 1)}
+                                                                    disabled={item.quantity <= 1}
+                                                                    className="w-7 h-7 flex items-center justify-center cursor-pointer border border-border-main rounded-md hover:bg-item-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-text-main"
+                                                                >
+                                                                    <Minus size={14} />
+                                                                </button>
+
+                                                                {/* Dynamic Quantity Indicator */}
+                                                                <span className="w-6 text-center text-sm font-semibold text-text-main">
+                                                                    {item.quantity}
+                                                                </span>
+
+                                                                {/* Increment Button */}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => updateQuantity(product.id, item.quantity + 1)}
+                                                                    disabled={item.quantity >= (product.stockQuantity || Infinity)}
+                                                                    className="w-7 h-7 flex items-center justify-center cursor-pointer border border-border-main rounded-md hover:bg-item-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-text-main"
+                                                                >
+                                                                    <Plus size={14} />
+                                                                </button>
+                                                            </div>
                                                         </div>
+
                                                         <div className="text-right">
                                                             <div className="text-brand-gold font-bold">
                                                                 ₱{(product.sellingPrice * item.quantity).toFixed(2)}
@@ -189,6 +237,7 @@ export const CheckoutTab = ({ shopId, updateCart }: ManualSearchTabProps) => {
                                                             </div>
                                                         </div>
                                                     </div>
+
                                                 </div>
                                             </div>
                                         </div>
