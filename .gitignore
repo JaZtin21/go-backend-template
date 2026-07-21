@@ -38,3 +38,6 @@ yarn-error.log*
 
 go-backend/.env
 backend/
+
+frontend/vite.config.*.timestamp-*
+vite.config.*.timestamp-*

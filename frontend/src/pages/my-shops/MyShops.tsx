@@ -9,7 +9,7 @@ import { setShops, setLoading, setError } from '~/store/myShopsSlice';
 import { useQuery } from '@apollo/client/react';
 import { GET_MY_SHOPS_QUERY } from '~/api/graphql/'; // Ensure GET_MY_SHOPS_QUERY uses TypedDocumentNode in its source file
 import type { Shop } from '~/types/shop';
-import { Plus, Store } from 'lucide-react';
+import { Plus, Store, ImageOff } from 'lucide-react';
 import { useMutation } from '@apollo/client/react';
 import { DELETE_SHOP_MUTATION } from '~/api/graphql';
 import { Check, TriangleAlert, X, Trash2 } from 'lucide-react';
@@ -35,17 +35,19 @@ export const MyShops: React.FC = () => {
     // PAGINATION SETUP: 10 items per page limit matrix footprint
     const PAGE_LIMIT = 10;
     const [offset, setOffset] = useState<number>(0);
+    const [isLoading, setIsLoading] = useState<boolean>(false);
 
     // 1. RUN APOLLO FETCH QUERY (Types inferred automatically via type inference)
-    const { loading: isLoading, error, data } = useMyShops({ limit: PAGE_LIMIT, offset, isSubscribed: isSubscribed });
+    const { loading: dataLoading, error, data } = useMyShops({ limit: PAGE_LIMIT, offset, isSubscribed: isSubscribed });
 
     // 2. READ DIRECTLY FROM REDUX STORAGE CACHE FOR VIEW TRANSFORMS
     const loadedShops = useSelector((state: RootState) => state.myShops.shops);
     const totalCount = useSelector((state: RootState) => state.myShops.totalCount);
 
+    console.log('Loaded Shops:', isLoading);
+
     // 3. LIFECYCLE DATA BOUNDARY BUFFER MANAGEMENT SYNC
     useEffect(() => {
-        dispatch(setLoading(isLoading));
 
         if (error) {
             dispatch(setError(error.message));
@@ -60,7 +62,7 @@ export const MyShops: React.FC = () => {
                 })
             );
         }
-    }, [data, isLoading, error, dispatch]);
+    }, [data, dataLoading, error, dispatch]);
 
     // Compute navigation parameters based on local state slices instead of flat payloads
     const hasNextPage = offset + PAGE_LIMIT < totalCount;
@@ -88,7 +90,6 @@ export const MyShops: React.FC = () => {
     const [deleteShop, { loading: isDeleting }] = useDeleteShop({
         // Optional: Refetch your shops list query or update Apollo cache here
         isSubscribed: isSubscribed,
-        refetchQueries: ['GetShops'],
         onCompleted: () => {
             // Reuse your existing modal helper to show success
             setIsConfirmingDelete(false);
@@ -204,7 +205,9 @@ export const MyShops: React.FC = () => {
                                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                         />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-text-muted text-xs font-semibold bg-bg-secondary-hover">
+                                        <div className="w-full h-full bg-brand-gold flex items-center justify-center flex-col gap-2 text-text-white text-xs font-semibold bg-bg-secondary-hover">
+
+                                            <ImageOff className="h-6 w-6" />
                                             No Cover Photo
                                         </div>
                                     )}
@@ -242,7 +245,7 @@ export const MyShops: React.FC = () => {
                                             e.stopPropagation();
                                             navigate(`/my-shops/${shop.id}`);
                                         }}
-                                        className="w-full h-9 backdrop-blur-sm rounded-full bg-bg-primary dark:bg-bg-secondary hover:bg-bg-primary-hover active:scale-98 transition-all text-xs font-bold text-text-main cursor-pointer flex items-center justify-center "
+                                        className="w-full h-9 backdrop-blur-sm rounded-full bg-bg-primary dark:bg-bg-secondary dark:border dark:border-text-white/20 hover:bg-bg-primary-hover active:scale-98 transition-all text-xs font-bold text-text-main cursor-pointer flex items-center justify-center "
                                     >
                                         Manage
                                     </button>

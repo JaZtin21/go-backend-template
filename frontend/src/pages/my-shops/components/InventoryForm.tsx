@@ -156,7 +156,6 @@ export default function InventoryForm({ isOpen, onClose, data }: { isOpen: boole
     }
 
     const [addInventoryItem, { loading: isAddingItem }] = useAddInventoryItem({
-        refetchQueries: ['GetShopInventory'],
         isSubscribed: isSubscribed,
         onCompleted: (data: any) => {
             if (data?.addInventoryItem) {
@@ -172,7 +171,6 @@ export default function InventoryForm({ isOpen, onClose, data }: { isOpen: boole
     });
 
     const [updateInventoryItem, { loading: isUpdatingItem }] = useUpdateInventoryItem({
-        refetchQueries: ['GetShopInventory'],
         isSubscribed: isSubscribed,
         onCompleted: (data: any) => {
             if (data?.updateInventoryItem) {
