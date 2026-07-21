@@ -416,11 +416,10 @@ export function useSearchShopProducts(isSubscribed: boolean) {
             variables: {
                 shopId: string;
                 query: string;
-                limit: number;   // 🚀 1. ENFORCED IN TYPES
-                offset: number;  // 🚀 1. ENFORCED IN TYPES
+                limit: number;
+                offset: number;
             }
         }) => {
-            // 🚀 2. Extract limit and offset from variables
             const { shopId, query, limit, offset } = options.variables;
 
             if (!isSubscribed) {
@@ -432,10 +431,16 @@ export function useSearchShopProducts(isSubscribed: boolean) {
                     .map(([id, row]) => fromItemRow(id, row))
                     .filter((i) => i.shopId === shopId && re.test(i.itemName));
 
-                // 🚀 3. ENFORCED OFFLINE: Apply slice using offset and limit variables
                 const slicedResults = allResults.slice(offset, offset + limit);
 
-                const data = { searchShopProducts: slicedResults };
+                // 🚀 EXACT STRUCTURAL SHAPE DISCOVERED: Matches result.data?.searchShopProducts?.products
+                const data = {
+                    searchShopProducts: {
+                        products: slicedResults,        // 🟢 Matches what ManualSearchTab checks for!
+                        totalCount: allResults.length
+                    }
+                };
+
                 setResult({ loading: false, error: null, data });
                 return { data };
             }
@@ -444,13 +449,7 @@ export function useSearchShopProducts(isSubscribed: boolean) {
             try {
                 const { data } = await client.query({
                     query: SEARCH_SHOP_PRODUCTS_QUERY,
-                    // 🚀 4. ENFORCED ONLINE: Pass everything cleanly down to Go backend
-                    variables: {
-                        shopId,
-                        query,
-                        limit,
-                        offset
-                    },
+                    variables: { shopId, query, limit, offset },
                     fetchPolicy: 'no-cache',
                 });
                 setResult({ loading: false, error: null, data });
@@ -465,6 +464,9 @@ export function useSearchShopProducts(isSubscribed: boolean) {
 
     return [search, result] as const;
 }
+
+
+
 
 
 // ---- 4. useCheckoutHistory (GET_CHECKOUT_HISTORY_QUERY) ----
