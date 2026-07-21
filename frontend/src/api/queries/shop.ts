@@ -32,9 +32,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore, useTable, useRow, useValue } from 'tinybase/ui-react';
 import type { Store } from 'tinybase';
 import client from '../../config/apolloClient';
-import type { Shop } from '~/types';
-import type { Item, CartItem } from '~/types';
-import type { ShopDashboardMetrics, DailySalesMetric } from '~/types/shop';
+import type { Item, CheckoutBatchResult, Shop, ShopDashboardMetrics, DailySalesMetric } from '~/types';
 
 import {
     SEARCH_SHOP_PRODUCTS_QUERY,
@@ -1145,25 +1143,34 @@ export function useDeleteInventoryItem(opts: MutationCallbacks) {
     return [deleteInventoryItem, { loading }] as const;
 }
 
-// ---- useCheckoutCart ----
-export function useCheckoutCart(opts: MutationCallbacks & { shopId: string }) {
+export function useCheckoutCart(opts: MutationCallbacks & { shopId: string; isSubscribed?: boolean }) {
     const store = useStore() as Store;
     const { loading, setLoading } = useMutationState();
 
     const checkoutCart = useCallback(
-        async (options: { variables: { items: CartItem[] } }) => {
+        async (options: {
+            variables: {
+                input: {
+                    shopId: string;
+                    items: { itemId: string; quantity: number }[]
+                }
+            }
+        }): Promise<CheckoutBatchResult | undefined> => {
+
             setLoading(true);
+            const { shopId, items } = options.variables.input;
+
             try {
                 if (opts.isSubscribed) {
+                    // Online Apollo Mutation Block
                     const { data } = await client.mutate({
                         mutation: CHECKOUT_CART_MUTATION,
                         variables: {
-                            input: {
-                                shopId: opts.shopId,
-                                items: options.variables.items.map((i) => ({ itemId: i.id, quantity: i.quantity })),
-                            },
+                            input: options.variables.input
                         },
+                        fetchPolicy: 'no-cache'
                     });
+
                     const serverBatch = data?.checkoutCart;
                     if (serverBatch) {
                         store.setRow('checkoutHistory', serverBatch.id, {
@@ -1178,8 +1185,7 @@ export function useCheckoutCart(opts: MutationCallbacks & { shopId: string }) {
                             _serverSynced: true,
                             _deleted: false,
                         });
-                        // The server already decremented stock authoritatively — sync
-                        // TinyBase's copy so the dashboard/inventory views agree with it.
+
                         (serverBatch.items ?? []).forEach((lineItem: any) => {
                             const existing = store.getRow('inventory', lineItem.inventoryItemId);
                             if (existing && Object.keys(existing).length > 0 && !existing._dirty) {
@@ -1193,22 +1199,29 @@ export function useCheckoutCart(opts: MutationCallbacks & { shopId: string }) {
                             }
                         });
                     }
+
                     opts.onCompleted?.(data);
+                    return { data };
+
                 } else {
+                    // Offline Mode Simulation Block
                     const id = crypto.randomUUID();
 
-                    const lineItems = options.variables.items.map((cartItem) => {
-                        const invRow = store.getRow('inventory', cartItem.id) as any;
+                    const lineItems = items.map((cartItem) => {
+                        const invRow = store.getRow('inventory', cartItem.itemId) as any;
                         const costPrice = invRow?.costPrice || 0;
+                        const itemName = invRow?.itemName || 'Unknown Item';
+                        const sellingPrice = invRow?.sellingPrice || 0;
+
                         return {
                             id: crypto.randomUUID(),
-                            inventoryItemId: cartItem.id,
-                            itemName: cartItem.itemName,
+                            inventoryItemId: cartItem.itemId,
+                            itemName,
                             quantity: cartItem.quantity,
                             costPrice,
-                            sellingPrice: cartItem.sellingPrice,
+                            sellingPrice,
                             lineCostTotal: costPrice * cartItem.quantity,
-                            lineSaleTotal: cartItem.sellingPrice * cartItem.quantity,
+                            lineSaleTotal: sellingPrice * cartItem.quantity,
                         };
                     });
 
@@ -1218,7 +1231,7 @@ export function useCheckoutCart(opts: MutationCallbacks & { shopId: string }) {
                     const grossProfit = grossSale - totalCost;
 
                     const record = {
-                        shopId: opts.shopId,
+                        shopId: shopId,
                         soldAt: new Date().toISOString(),
                         totalItems,
                         totalCost,
@@ -1229,30 +1242,39 @@ export function useCheckoutCart(opts: MutationCallbacks & { shopId: string }) {
                         _serverSynced: false,
                         _deleted: false,
                     };
+
                     store.setRow('checkoutHistory', id, record);
 
-                    // NOTE: intentionally NOT marking these inventory cells `_dirty`
-                    // as part of a checkout-driven decrement — see syncEngine.ts
-                    // syncAll() comment for why (avoids a double-decrement once the
-                    // checkout itself pushes and the server does its own decrement).
-                    options.variables.items.forEach((cartItem) => {
-                        const existing = store.getRow('inventory', cartItem.id);
+                    items.forEach((cartItem) => {
+                        const existing = store.getRow('inventory', cartItem.itemId);
                         if (existing && Object.keys(existing).length > 0) {
                             const newStock = ((existing.stockQuantity as number) || 0) - cartItem.quantity;
-                            store.setCell('inventory', cartItem.id, 'stockQuantity', Math.max(0, newStock));
-                            store.setCell('inventory', cartItem.id, 'updatedAt', new Date().toISOString());
+                            store.setCell('inventory', cartItem.itemId, 'stockQuantity', Math.max(0, newStock));
+                            store.setCell('inventory', cartItem.itemId, 'updatedAt', new Date().toISOString());
                         }
                     });
 
-                    opts.onCompleted?.({ checkoutCart: { id, ...record, items: lineItems } });
+                    const mockResponse: CheckoutBatchResult = {
+                        data: {
+                            checkoutCart: {
+                                id,
+                                ...record,
+                                items: lineItems
+                            }
+                        }
+                    };
+
+                    opts.onCompleted?.(mockResponse.data);
+                    return mockResponse;
                 }
             } catch (err) {
                 opts.onError?.(err);
+                throw err;
             } finally {
                 setLoading(false);
             }
         },
-        [opts.isSubscribed, store, opts.shopId]
+        [opts.isSubscribed, store, opts.shopId, opts.onCompleted, opts.onError]
     );
 
     return [checkoutCart, { loading }] as const;

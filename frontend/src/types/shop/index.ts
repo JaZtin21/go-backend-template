@@ -77,3 +77,18 @@ export interface ShopDashboardMetrics {
 export interface GetShopDashboardMetricsData {
   getShopDashboardMetrics: ShopDashboardMetrics;
 }
+
+export interface CheckoutBatchResult {
+  data: {
+    checkoutCart: {
+      id: string;
+      shopId: string;
+      soldAt: string;
+      totalItems: number;
+      totalCost: number;
+      grossSale: number;
+      grossProfit: number;
+      items: any[];
+    }
+  }
+}

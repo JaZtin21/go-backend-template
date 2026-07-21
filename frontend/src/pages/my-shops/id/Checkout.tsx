@@ -97,17 +97,7 @@ export default function Checkout({ isOpen, onClose }: { isOpen: boolean, onClose
                         )}
                         {/* CHECKOUT TAB */}
                         {activeTab === 'checkout' && (
-                            cart.length === 0 ? (
-                                <div className="flex-1 flex items-center justify-center text-text-sub">
-                                    <div className="text-center">
-                                        <ShoppingCart size={48} className="mx-auto mb-4 opacity-50" />
-                                        <p>Your cart is empty</p>
-                                        <p className="text-sm mt-2">Add items using Manual Input or AI Scanner</p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <CheckoutTab shopId={shopId || ""} updateCart={() => getCartItems(shopId || "")} />
-                            )
+                            <CheckoutTab shopId={shopId || ""} updateCart={() => getCartItems(shopId || "")} />
                         )}
                     </div>
                 </div>

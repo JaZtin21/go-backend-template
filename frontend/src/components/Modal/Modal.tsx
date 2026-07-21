@@ -33,6 +33,7 @@ const Modal = ({ isOpen, onClose, title, subtitle, children, isFullScreenModal, 
 
     if (typeof window === 'undefined') return null;
 
+
     return createPortal(
         <AnimatePresence mode="wait">
             {isOpen && (

@@ -1,7 +1,6 @@
 import React, { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search, ChevronUp, ChevronDown } from 'lucide-react';
-import { useQuery, useMutation } from '@apollo/client/react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
     setInventory,
@@ -9,12 +8,11 @@ import {
     setInventoryError,
     deleteInventoryItem as deleteInventoryItemAction
 } from '~/store/inventorySlice';
-import { DELETE_INVENTORY_ITEM_MUTATION, GET_SHOP_INVENTORY_QUERY } from '~/api/graphql';
 import InventoryForm from '../components/InventoryForm';
 import type { Item } from '~/types';
 import { Modal } from '~/components';
 import { X, Check, TriangleAlert } from 'lucide-react';
-import { useShopInventory } from '~/api/queries';
+import { useShopInventory, useDeleteInventoryItem } from '~/api/queries';
 
 // Generic debounce hook: returns a debounced copy of `value` that only
 // updates after `delay` ms have passed without `value` changing again.
@@ -121,8 +119,8 @@ export const InventoryPage = () => {
 
 
     // 6. DELETE MUTATION IMPLEMENTATION
-    const [deleteInventoryItem, { loading: isDeleting }] = useMutation(DELETE_INVENTORY_ITEM_MUTATION, {
-        refetchQueries: ['GetShopInventory'],
+    const [deleteInventoryItem, { loading: isDeleting }] = useDeleteInventoryItem({
+        isSubscribed: isSubscribed,
         onCompleted: () => {
             // Reuse your existing modal helper to show success
             setIsConfirmingDelete(false);
@@ -136,7 +134,6 @@ export const InventoryPage = () => {
             setIsModalOpen(true);
             setIsSuccess(false);
             setModalMessage(error.message || 'Failed to delete item. Please try again.');
-
         }
     });
 

@@ -1,26 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ClipboardList, ReceiptText } from 'lucide-react';
-import { useQuery } from '@apollo/client/react';
-import { GET_CHECKOUT_HISTORY_QUERY, GET_ITEM_ACTION_HISTORY_QUERY } from '~/api/graphql';
-import type { CheckoutHistoryBatch, ItemActionHistoryRecord } from '~/types';
-import { useShopInventory, useCheckoutHistory, useItemActionHistory } from '~/api/queries';
+import { useCheckoutHistory, useItemActionHistory } from '~/api/queries';
 
-interface CheckoutHistoryResponse {
-  getCheckoutHistory: {
-    batches: CheckoutHistoryBatch[];
-    totalCount: number;
-    hasNextPage: boolean;
-  };
-}
-
-interface ItemActionHistoryResponse {
-  getItemActionHistory: {
-    records: ItemActionHistoryRecord[];
-    totalCount: number;
-    hasNextPage: boolean;
-  };
-}
 
 const PAGE_LIMIT = 10;
 
@@ -30,7 +12,7 @@ export const SalesHistoryPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'checkout' | 'actions'>('checkout');
   const [checkoutOffset, setCheckoutOffset] = useState(0);
   const [actionsOffset, setActionsOffset] = useState(0);
-  const isSubscribed = false;
+  const isSubscribed = true;
 
   const checkoutQuery = useCheckoutHistory({
     shopId: shopId || '',
@@ -170,7 +152,7 @@ export const SalesHistoryPage: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border-sub/20 text-sm font-medium">
-                          {batch.items.map((item) => (
+                          {batch.items.map((item: any) => (
                             <tr key={item.id} className="h-11">
                               <td className="text-text-muted">{item.inventoryItemId}</td>
                               <td className="font-semibold text-text-main">{item.itemName}</td>
