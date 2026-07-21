@@ -359,14 +359,41 @@ export function RestockScannerTab({ shopId, updateCart }: ScannerTabProps) {
                                         {selectedProduct.itemName}
                                     </span>
                                     {selectedProduct.unitOfMeasure && (
-                                        <span className="text-xs text-text-sub truncate">{selectedProduct.unitOfMeasure}</span>
+                                        <div className="flex flex-wrap gap-2 mt-1.5 mb-2 items-center">
+                                            {groupedProducts.map((variant) => {
+                                                // Check if this capsule is the currently selected product variant
+                                                const isSelected = variant.id === selectedProduct.id;
+                                                // Check stock so users can't click dead stock variants
+                                                const isOutOfStock = variant.stockQuantity <= 0;
+
+                                                return (
+                                                    <button
+                                                        key={variant.id}
+                                                        type="button"
+                                                        // Prevent clicking out-of-stock items unless it's somehow already selected
+                                                        disabled={isOutOfStock && !isSelected}
+                                                        onClick={() => handleUnitSelect(variant)}
+                                                        className={`px-3 py-1 text-xs tracking-wider font-semibold rounded-sm border transition-all cursor-pointer select-none
+                                                           ${isSelected && !isOutOfStock
+                                                                ? ' text-brand-gold border-brand-gold shadow-sm'
+                                                                : 'bg-bg-primary text-text-sub border-border-sub hover:border-brand-gold hover:text-text-main'
+                                                            }
+                                                           ${isOutOfStock ? 'opacity-40 cursor-not-allowed line-through bg-item-hover' : ''}
+                                                     `}
+                                                    >
+                                                        {variant.unitOfMeasure || 'Not specified'}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
                                     )}
-                                    <span className="text-brand-gold font-bold">₱{selectedProduct.sellingPrice.toFixed(2)}</span>
-                                    {predictionConfidence !== null && (
+                                    <span className="text-brand-green font-bold">₱{selectedProduct.sellingPrice.toFixed(2)}</span>
+                                    {/*predictionConfidence !== null && (
                                         <span className="text-xs text-green-600 font-medium">
                                             Confidence: {Math.round(predictionConfidence * 100)}%
                                         </span>
-                                    )}
+                                    )*/}
                                 </div>
 
                                 {/* 🚀 NEW: quantity stepper on the result card itself */}
@@ -395,7 +422,7 @@ export function RestockScannerTab({ shopId, updateCart }: ScannerTabProps) {
                                 <button
                                     type="button"
                                     onClick={handleAddFromResult}
-                                    disabled={Number(quantity) <= 0}
+                                    disabled={Number(quantity) <= 0 || showUnitDropdown}
                                     className="w-full cursor-pointer py-3 bg-brand-gold hover:bg-brand-gold-hover text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Add to Cart
