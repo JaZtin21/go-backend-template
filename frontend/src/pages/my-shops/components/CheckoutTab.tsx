@@ -25,7 +25,7 @@ export const CheckoutTab = ({ shopId, updateCart }: ManualSearchTabProps) => {
     const [isSuccess, setIsSuccess] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
-    const isSubscribed = true
+    const isSubscribed = false
 
 
 

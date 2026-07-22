@@ -205,7 +205,7 @@ export const MyShops: React.FC = () => {
                                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                         />
                                     ) : (
-                                        <div className="w-full h-full bg-brand-gold flex items-center justify-center flex-col gap-2 text-text-white text-xs font-semibold bg-bg-secondary-hover">
+                                        <div className="w-full h-full bg-text-muted group-hover:scale-105 transition-transform duration-500 flex items-center justify-center flex-col gap-2 text-text-white text-xs font-semibold bg-bg-secondary-hover">
 
                                             <ImageOff className="h-6 w-6" />
                                             No Cover Photo
@@ -213,8 +213,7 @@ export const MyShops: React.FC = () => {
                                     )}
                                 </div>
 
-                                {/* 2. Top Right Destructive Action (Delete Button) */}
-                                <button
+                                {/* 2. Top Right Destructive Action (Delete Button)        <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleOpenDeletePrompt(shop.id!)
@@ -222,7 +221,8 @@ export const MyShops: React.FC = () => {
                                     className="absolute top-3 right-3 z-20 h-7 px-0.5 rounded-lg bg-brand-red/70 border-2 border-brand-red hover:bg-brand-red-hover active:scale-95 transition-all text-[11px] font-bold text-text-white cursor-pointer"
                                 >
                                     <Trash2 className="h-5 w-5" />
-                                </button>
+                                </button>*/}
+
 
                                 {/* 3. Dark Bottom Gradient Shadow Vignette */}
                                 <div className="absolute -inset-1 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10 pointer-events-none" />
@@ -245,7 +245,7 @@ export const MyShops: React.FC = () => {
                                             e.stopPropagation();
                                             navigate(`/my-shops/${shop.id}`);
                                         }}
-                                        className="w-full h-9 backdrop-blur-sm rounded-full bg-bg-primary dark:bg-bg-secondary dark:border dark:border-text-white/20 hover:bg-bg-primary-hover active:scale-98 transition-all text-xs font-bold text-text-main cursor-pointer flex items-center justify-center "
+                                        className="w-full h-9 backdrop-blur-sm rounded-full bg-bg-primary dark:bg-bg-secondary dark:border dark:border-text-white/40 hover:bg-bg-primary-hover active:scale-98 transition-all text-xs font-bold text-text-main cursor-pointer flex items-center justify-center "
                                     >
                                         Manage
                                     </button>
