@@ -1024,22 +1024,27 @@ export function useDeleteShop(opts: MutationCallbacks) {
             setLoading(true);
 
             try {
-                if (opts.isSubscribed) {
-                    await client.mutate({
-                        mutation: DELETE_SHOP_MUTATION,
-                        variables: { shopId },
-                    });
+                const existing = store.getRow('shops', shopId);
+                const hasLocalRow = !!(existing && Object.keys(existing).length > 0);
+                // Created offline and never confirmed by the server — there's
+                // nothing there to delete. Calling the mutation would error
+                // (server has no record of this id). Just drop it locally.
+                const isUnsyncedLocalOnly = hasLocalRow && !(existing as any)._serverSynced;
 
-                    if (shouldPersistLocally(opts.isSubscribed)) {
+                if (opts.isSubscribed) {
+                    if (isUnsyncedLocalOnly) {
                         store.delRow('shops', shopId);
+                    } else {
+                        await client.mutate({
+                            mutation: DELETE_SHOP_MUTATION,
+                            variables: { shopId },
+                        });
+                        if (shouldPersistLocally(opts.isSubscribed) && hasLocalRow) {
+                            store.delRow('shops', shopId);
+                        }
                     }
-                    // Redux removal for Condition 3 is done by the caller
-                    // (MyShops.tsx already dispatches deleteShopAction in its
-                    // onCompleted — that's the single writer here, so it's
-                    // left as-is rather than duplicated in this hook).
                 } else {
-                    const existing = store.getRow('shops', shopId);
-                    if (existing && Object.keys(existing).length > 0 && (existing as any)._serverSynced) {
+                    if (hasLocalRow && (existing as any)._serverSynced) {
                         store.setPartialRow('shops', shopId, { _deleted: true, _dirty: true });
                     } else {
                         store.delRow('shops', shopId);
@@ -1359,19 +1364,27 @@ export function useDeleteInventoryItem(opts: MutationCallbacks) {
 
     const deleteInventoryItem = useCallback(
         async (options: { variables: { itemId: string } }) => {
+            const { itemId } = options.variables;
             setLoading(true);
             try {
+                const existing = store.getRow('inventory', itemId);
+                const hasLocalRow = !!(existing && Object.keys(existing).length > 0);
+                const isUnsyncedLocalOnly = hasLocalRow && !(existing as any)._serverSynced;
+
                 if (opts.isSubscribed) {
-                    await client.mutate({ mutation: DELETE_INVENTORY_ITEM_MUTATION, variables: { itemId: options.variables.itemId } });
-                    if (shouldPersistLocally(opts.isSubscribed)) {
-                        store.delRow('inventory', options.variables.itemId);
+                    if (isUnsyncedLocalOnly) {
+                        store.delRow('inventory', itemId);
+                    } else {
+                        await client.mutate({ mutation: DELETE_INVENTORY_ITEM_MUTATION, variables: { itemId } });
+                        if (shouldPersistLocally(opts.isSubscribed) && hasLocalRow) {
+                            store.delRow('inventory', itemId);
+                        }
                     }
                 } else {
-                    const existing = store.getRow('inventory', options.variables.itemId);
-                    if (existing && Object.keys(existing).length > 0 && existing._serverSynced) {
-                        store.setPartialRow('inventory', options.variables.itemId, { _deleted: true, _dirty: true });
+                    if (hasLocalRow && (existing as any)._serverSynced) {
+                        store.setPartialRow('inventory', itemId, { _deleted: true, _dirty: true });
                     } else {
-                        store.delRow('inventory', options.variables.itemId);
+                        store.delRow('inventory', itemId);
                     }
                 }
                 opts.onCompleted?.();
