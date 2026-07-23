@@ -12,7 +12,7 @@ export const SalesHistoryPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'checkout' | 'actions'>('checkout');
   const [checkoutOffset, setCheckoutOffset] = useState(0);
   const [actionsOffset, setActionsOffset] = useState(0);
-  const isSubscribed = false;
+  const isSubscribed = true;
 
   const checkoutQuery = useCheckoutHistory({
     shopId: shopId || '',

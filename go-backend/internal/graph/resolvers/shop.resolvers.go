@@ -7,6 +7,7 @@ package graph
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -966,31 +967,26 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		log.Printf("🔴 FAILED TO ACQUIRE POSTGRES TRANSACTION: %v", err)
 		return nil, errors.New("internal server error")
 	}
-	defer tx.Rollback(ctx) // Safe fallback rollback if execution fails halfway
+	defer tx.Rollback(ctx)
 
-	// Caches to map temporary localIds to genuine server database UUIDs
 	shopIDMap := make(map[string]string)
 	itemIDMap := make(map[string]string)
 
-	// Arrays to keep track of confirmations returning down to this client
 	var upsertedShops []map[string]any
 	var upsertedInventory []map[string]any
 	var upsertedCheckouts []map[string]any
 	var upsertedHistories []map[string]any
 
 	// =========================================================================
-	// PHASE 1: PROCESS SHOPS BATCH ARRAY
+	// PHASE 1: PROCESS SHOPS BATCH ARRAY   (unchanged)
 	// =========================================================================
 	for _, s := range input.Shops {
 		if s.IsDeleted {
-			// Process Soft Delete State Anchor
 			_, err = tx.Exec(ctx, `UPDATE shops SET deleted_at = NOW() WHERE id = $1 AND owner_id = $2`, s.LocalID, currentUser.ID)
 			if err != nil {
 				log.Printf("🔴 BATCH SYNC: Failed to soft-delete shop %s: %v", s.LocalID, err)
 				return nil, err
 			}
-
-			// Append a confirmation map so the frontend knows the delete succeeded!
 			upsertedShops = append(upsertedShops, map[string]any{
 				"id":        s.LocalID,
 				"localId":   s.LocalID,
@@ -1010,7 +1006,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		var finalCreatedAt time.Time
 
 		if s.IsServerSynced {
-			// UPDATE Existing Record
 			query := `
 				UPDATE shops SET 
 					shop_name = $1, address = $2, description = $3, photo = $4, photos = $5,
@@ -1024,7 +1019,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 				s.LocalID, currentUser.ID,
 			).Scan(&finalServerID, &finalCreatedAt)
 		} else {
-			// INSERT New Record (Preserving true offline history via client_created_at if passed)
 			createdAtAnchor := time.Now()
 			if s.ClientCreatedAt != nil {
 				if parsedTime, parseErr := time.Parse(time.RFC3339, *s.ClientCreatedAt); parseErr == nil {
@@ -1053,11 +1047,8 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			return nil, err
 		}
 
-		// Hydrate ID Translation Table
 		shopIDMap[s.LocalID] = finalServerID
 
-		// FIX: Map the full properties manually to match what your frontend sync engine expects.
-		// This keeps your UI fully populated without throwing undefined helper errors.
 		upsertedShops = append(upsertedShops, map[string]any{
 			"id":             finalServerID,
 			"localId":        s.LocalID,
@@ -1077,10 +1068,9 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 	}
 
 	// =========================================================================
-	// PHASE 2: PROCESS INVENTORY ITEMS BATCH ARRAY
+	// PHASE 2: PROCESS INVENTORY ITEMS BATCH ARRAY   (unchanged)
 	// =========================================================================
 	for _, item := range input.Inventory {
-		// Resolve dynamic parent foreign key using translation tables
 		targetShopID := item.ShopID
 		if realShopID, exists := shopIDMap[item.ShopID]; exists {
 			targetShopID = realShopID
@@ -1092,8 +1082,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 				log.Printf("🔴 BATCH SYNC: Failed to soft-delete item %s: %v", item.LocalID, err)
 				return nil, err
 			}
-
-			// Append deletion confirmation back down to the frontend
 			upsertedInventory = append(upsertedInventory, map[string]any{
 				"id":        item.LocalID,
 				"localId":   item.LocalID,
@@ -1137,8 +1125,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 
 		itemIDMap[item.LocalID] = finalItemID
 
-		// FIX: Map the full item properties back down to the response slice manually
-		// using your exact incoming input values to completely satisfy your frontend fields.
 		upsertedInventory = append(upsertedInventory, map[string]any{
 			"id":            finalItemID,
 			"localId":       item.LocalID,
@@ -1158,8 +1144,12 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 	}
 
 	// =========================================================================
-	// PHASE 3: PROCESS CHECKOUT TRANSACTIONS BATCH ARRAY (Append-Only)
+	// PHASE 3: PROCESS CHECKOUT TRANSACTIONS BATCH ARRAY (Append-Only)   (unchanged)
 	// =========================================================================
+	// NEW: track which batch ids were just created by *this* push so Phase 5
+	// doesn't also try to pull them back down as if some other device made them.
+	pushedCheckoutIDs := make(map[string]bool)
+
 	for _, c := range input.Checkouts {
 		targetShopID := c.ShopID
 		if realShopID, exists := shopIDMap[c.ShopID]; exists {
@@ -1173,7 +1163,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			}
 		}
 
-		// We will temporarily initialize counters to zero and compute sums during internal calculations
 		var batchID string
 		err = tx.QueryRow(ctx, `
 			INSERT INTO checkout_batches (shop_id, sold_at, total_items, total_cost, gross_sale, gross_profit) 
@@ -1191,7 +1180,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 				resolvedItemID = realItemID
 			}
 
-			// Gather pricing reality directly inside database bounds to prevent spoofing variables
 			var itemName string
 			var costPrice, sellingPrice float64
 			err = tx.QueryRow(ctx, `SELECT item_name, cost_price, selling_price FROM inventory_items WHERE id = $1`, resolvedItemID).Scan(&itemName, &costPrice, &sellingPrice)
@@ -1210,7 +1198,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 				return nil, err
 			}
 
-			// Atomically decrement live stock balances
 			_, err = tx.Exec(ctx, `UPDATE inventory_items SET stock_quantity = stock_quantity - $1 WHERE id = $2`, itemInput.Quantity, resolvedItemID)
 			if err != nil {
 				return nil, err
@@ -1221,7 +1208,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			runningGrossSale += lineSaleTotal
 		}
 
-		// Update batch header aggregations with final totals
 		grossProfit := runningGrossSale - runningTotalCost
 		_, err = tx.Exec(ctx, `
 			UPDATE checkout_batches 
@@ -1231,36 +1217,37 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			return nil, err
 		}
 
+		pushedCheckoutIDs[batchID] = true // NEW
+
 		upsertedCheckouts = append(upsertedCheckouts, map[string]any{
 			"id":      batchID,
 			"localId": c.LocalID,
 			"shopId":  targetShopID,
 		})
 	}
+
 	// =========================================================================
-	// PHASE 4: PROCESS ITEM ACTION HISTORIES ARRAY (Append-Only)
+	// PHASE 4: PROCESS ITEM ACTION HISTORIES ARRAY (Append-Only)   (unchanged)
 	// =========================================================================
+	pushedHistoryIDs := make(map[string]bool) // NEW
+
 	for _, h := range input.ActionHistories {
 		targetShopID := h.ShopID
 		if realShopID, exists := shopIDMap[h.ShopID]; exists {
 			targetShopID = realShopID
 		}
 
-		// Resolve dynamic inventory item foreign key using translation tables
 		var resolvedItemID *string
 		if h.InventoryItemID != nil {
 			if realItemID, exists := itemIDMap[*h.InventoryItemID]; exists {
-				// The item was newly created in this batch; use its real database ID
 				realIDCopy := realItemID
 				resolvedItemID = &realIDCopy
 			} else {
-				// The item already existed server-side; keep its provided ID
 				providedIDCopy := *h.InventoryItemID
 				resolvedItemID = &providedIDCopy
 			}
 		}
 
-		// Parse the true offline historical time when the action was logged
 		createdAtAnchor := time.Now()
 		if parsedTime, parseErr := time.Parse(time.RFC3339, h.ClientCreatedAt); parseErr == nil {
 			createdAtAnchor = parsedTime
@@ -1278,7 +1265,8 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			return nil, err
 		}
 
-		// FIX: Use accurate key formatting matching your target data models
+		pushedHistoryIDs[historyID] = true // NEW
+
 		upsertedHistories = append(upsertedHistories, map[string]any{
 			"id":              historyID,
 			"localId":         h.LocalID,
@@ -1294,31 +1282,28 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 	// =========================================================================
 	// PHASE 5: FETCH GLOBAL DELTAS FROM PULL ANCHORS
 	// =========================================================================
-	// Capture the current authoritative backend clock time to send back as the next sync checkpoint
 	serverCheckpointTime := time.Now().Format(time.RFC3339)
 
 	lastSyncedAnchor, parseErr := time.Parse(time.RFC3339, input.LastSyncedAt)
 	if parseErr != nil {
-		// Fallback to Unix epoch baseline if the frontend sends an empty or invalid format
 		lastSyncedAnchor = time.Unix(0, 0)
 	}
 
-	// 1. Fetch IDs of shops owned by this user that were deleted on other devices since last sync
+	// ---- 5a. Deletions (unchanged) ----
 	var deletedShops []string
-	shopRows, err := tx.Query(ctx, `SELECT id FROM shops WHERE owner_id = $1 AND deleted_at > $2`, currentUser.ID, lastSyncedAnchor)
+	shopDelRows, err := tx.Query(ctx, `SELECT id FROM shops WHERE owner_id = $1 AND deleted_at > $2`, currentUser.ID, lastSyncedAnchor)
 	if err == nil {
-		for shopRows.Next() {
+		for shopDelRows.Next() {
 			var id string
-			if errScan := shopRows.Scan(&id); errScan == nil {
+			if errScan := shopDelRows.Scan(&id); errScan == nil {
 				deletedShops = append(deletedShops, id)
 			}
 		}
-		shopRows.Close()
+		shopDelRows.Close()
 	}
 
-	// 2. Fetch IDs of inventory items in this user's shops that were deleted on other devices since last sync
 	var deletedItems []string
-	itemRows, err := tx.Query(ctx, `
+	itemDelRows, err := tx.Query(ctx, `
 		SELECT i.id 
 		FROM inventory_items i 
 		JOIN shops s ON i.shop_id = s.id 
@@ -1326,25 +1311,267 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		currentUser.ID, lastSyncedAnchor,
 	)
 	if err == nil {
-		for itemRows.Next() {
+		for itemDelRows.Next() {
 			var id string
-			if errScan := itemRows.Scan(&id); errScan == nil {
+			if errScan := itemDelRows.Scan(&id); errScan == nil {
 				deletedItems = append(deletedItems, id)
 			}
 		}
-		itemRows.Close()
+		itemDelRows.Close()
+	}
+
+	// ---- 5b. NEW: full-row upserts changed since lastSyncedAt ----
+	// Covers: fresh installs / wiped local DBs (lastSyncedAt = epoch, so this
+	// pulls everything), plus normal cross-device sync of things this client
+	// didn't just push itself.
+
+	// Build "already pushed by this call" sets so we don't double-return rows
+	// that are already sitting in upsertedShops/upsertedInventory from Phase 1/2.
+	pushedShopIDs := make(map[string]bool)
+	for _, realID := range shopIDMap {
+		pushedShopIDs[realID] = true
+	}
+	pushedItemIDs := make(map[string]bool)
+	for _, realID := range itemIDMap {
+		pushedItemIDs[realID] = true
+	}
+
+	// --- shops ---
+	shopChangeRows, err := tx.Query(ctx, `
+		SELECT id, shop_name, address, description, photo, photos, coordinates,
+		       business_hours, payment_methods, delivery, social_media, contact_details,
+		       status, verification, created_at
+		FROM shops
+		WHERE owner_id = $1 AND deleted_at IS NULL AND server_updated_at > $2
+	`, currentUser.ID, lastSyncedAnchor)
+	if err != nil {
+		log.Printf("🔴 BATCH SYNC: pull query for shops failed: %v", err)
+	} else {
+		for shopChangeRows.Next() {
+			var (
+				id, shopName, address                                                     string
+				description, photo                                                        sql.NullString
+				photos                                                                    []string
+				coordinatesRaw, hoursRaw, paymentsRaw, deliveryRaw, socialRaw, contactRaw []byte
+				statusRaw, verificationRaw                                                []byte
+				createdAt                                                                 time.Time
+			)
+			scanErr := shopChangeRows.Scan(
+				&id, &shopName, &address, &description, &photo, &photos, &coordinatesRaw,
+				&hoursRaw, &paymentsRaw, &deliveryRaw, &socialRaw, &contactRaw,
+				&statusRaw, &verificationRaw, &createdAt,
+			)
+			if scanErr != nil {
+				log.Printf("🔴 BATCH SYNC: shop pull row scan failed: %v", scanErr)
+				continue
+			}
+			if pushedShopIDs[id] {
+				continue // this client just pushed this shop in Phase 1 — don't duplicate it
+			}
+
+			var coordinates, businessHours, paymentMethods, delivery, socialMedia, contactDetails, status, verification any
+			_ = json.Unmarshal(coordinatesRaw, &coordinates)
+			_ = json.Unmarshal(hoursRaw, &businessHours)
+			_ = json.Unmarshal(paymentsRaw, &paymentMethods)
+			_ = json.Unmarshal(deliveryRaw, &delivery)
+			_ = json.Unmarshal(socialRaw, &socialMedia)
+			_ = json.Unmarshal(contactRaw, &contactDetails)
+			_ = json.Unmarshal(statusRaw, &status)
+			_ = json.Unmarshal(verificationRaw, &verification)
+
+			upsertedShops = append(upsertedShops, map[string]any{
+				"id": id,
+				// deliberately no "localId" — this row didn't come from this
+				// client's dirty queue, so the client-side reconciliation in
+				// syncEngine.ts falls through to its upsert-by-realId path.
+				"shopName":       shopName,
+				"address":        address,
+				"description":    description.String,
+				"photo":          photo.String,
+				"photos":         photos,
+				"coordinates":    coordinates,
+				"businessHours":  businessHours,
+				"paymentMethods": paymentMethods,
+				"delivery":       delivery,
+				"socialMedia":    socialMedia,
+				"contactDetails": contactDetails,
+				"status":         status,
+				"verification":   verification,
+				"createdAt":      createdAt.Format(time.RFC3339),
+			})
+		}
+		shopChangeRows.Close()
+	}
+
+	// --- inventory items ---
+	itemChangeRows, err := tx.Query(ctx, `
+		SELECT i.id, i.shop_id, i.item_name, i.description, i.barcode, i.category, i.unit_of_measure,
+		       i.cost_price, i.selling_price, i.stock_quantity, i.reorder_level, i.photo, i.server_updated_at
+		FROM inventory_items i
+		JOIN shops s ON i.shop_id = s.id
+		WHERE s.owner_id = $1 AND i.deleted_at IS NULL AND i.server_updated_at > $2
+	`, currentUser.ID, lastSyncedAnchor)
+	if err != nil {
+		log.Printf("🔴 BATCH SYNC: pull query for inventory failed: %v", err)
+	} else {
+		for itemChangeRows.Next() {
+			var (
+				id, shopID                                    string
+				itemName                                      string
+				description, barcode, category, unitOfMeasure sql.NullString
+				costPrice, sellingPrice                       float64
+				stockQuantity, reorderLevel                   int
+				photo                                         sql.NullString
+				updatedAt                                     time.Time
+			)
+			scanErr := itemChangeRows.Scan(
+				&id, &shopID, &itemName, &description, &barcode, &category, &unitOfMeasure,
+				&costPrice, &sellingPrice, &stockQuantity, &reorderLevel, &photo, &updatedAt,
+			)
+			if scanErr != nil {
+				log.Printf("🔴 BATCH SYNC: inventory pull row scan failed: %v", scanErr)
+				continue
+			}
+			if pushedItemIDs[id] {
+				continue
+			}
+
+			upsertedInventory = append(upsertedInventory, map[string]any{
+				"id":            id,
+				"shopId":        shopID,
+				"itemName":      itemName,
+				"description":   description.String,
+				"barcode":       barcode.String,
+				"category":      category.String,
+				"unitOfMeasure": unitOfMeasure.String,
+				"costPrice":     costPrice,
+				"sellingPrice":  sellingPrice,
+				"stockQuantity": stockQuantity,
+				"reorderLevel":  reorderLevel,
+				"photo":         photo.String,
+				"updatedAt":     updatedAt.Format(time.RFC3339),
+			})
+		}
+		itemChangeRows.Close()
+	}
+
+	// --- checkout batches (append-only — no deletedIds needed) ---
+	checkoutChangeRows, err := tx.Query(ctx, `
+		SELECT cb.id, cb.shop_id, cb.sold_at, cb.total_items, cb.total_cost, cb.gross_sale, cb.gross_profit,
+		       COALESCE(
+		         json_agg(
+		           json_build_object(
+		             'inventoryItemId', cbi.inventory_item_id,
+		             'itemName', cbi.item_name,
+		             'quantity', cbi.quantity,
+		             'costPrice', cbi.cost_price,
+		             'sellingPrice', cbi.selling_price,
+		             'lineCostTotal', cbi.line_cost_total,
+		             'lineSaleTotal', cbi.line_sale_total
+		           )
+		         ) FILTER (WHERE cbi.inventory_item_id IS NOT NULL),
+		         '[]'
+		       ) AS items
+		FROM checkout_batches cb
+		JOIN shops s ON cb.shop_id = s.id
+		LEFT JOIN checkout_batch_items cbi ON cbi.id = cb.id
+		WHERE s.owner_id = $1 AND cb.server_updated_at > $2
+		GROUP BY cb.id, cb.shop_id, cb.sold_at, cb.total_items, cb.total_cost, cb.gross_sale, cb.gross_profit
+	`, currentUser.ID, lastSyncedAnchor)
+	if err != nil {
+		log.Printf("🔴 BATCH SYNC: pull query for checkouts failed: %v", err)
+	} else {
+		for checkoutChangeRows.Next() {
+			var (
+				id, shopID                        string
+				soldAt                            time.Time
+				totalItems                        int
+				totalCost, grossSale, grossProfit float64
+				itemsRaw                          []byte
+			)
+			scanErr := checkoutChangeRows.Scan(&id, &shopID, &soldAt, &totalItems, &totalCost, &grossSale, &grossProfit, &itemsRaw)
+			if scanErr != nil {
+				log.Printf("🔴 BATCH SYNC: checkout pull row scan failed: %v", scanErr)
+				continue
+			}
+			if pushedCheckoutIDs[id] {
+				continue
+			}
+
+			var items any
+			_ = json.Unmarshal(itemsRaw, &items)
+
+			upsertedCheckouts = append(upsertedCheckouts, map[string]any{
+				"id":          id,
+				"shopId":      shopID,
+				"soldAt":      soldAt.Format(time.RFC3339),
+				"totalItems":  totalItems,
+				"totalCost":   totalCost,
+				"grossSale":   grossSale,
+				"grossProfit": grossProfit,
+				"items":       items,
+			})
+		}
+		checkoutChangeRows.Close()
+	}
+
+	// --- item action histories (append-only) ---
+	historyChangeRows, err := tx.Query(ctx, `
+		SELECT h.id, h.shop_id, h.inventory_item_id, h.item_name, h.action, h.quantity, h.created_at
+		FROM item_action_history h
+		JOIN shops s ON h.shop_id = s.id
+		WHERE s.owner_id = $1 AND h.server_updated_at > $2
+	`, currentUser.ID, lastSyncedAnchor)
+	if err != nil {
+		log.Printf("🔴 BATCH SYNC: pull query for action histories failed: %v", err)
+	} else {
+		for historyChangeRows.Next() {
+			var (
+				id, shopID       string
+				inventoryItemID  sql.NullString
+				itemName, action string
+				quantity         sql.NullInt32
+				createdAt        time.Time
+			)
+			scanErr := historyChangeRows.Scan(&id, &shopID, &inventoryItemID, &itemName, &action, &quantity, &createdAt)
+			if scanErr != nil {
+				log.Printf("🔴 BATCH SYNC: history pull row scan failed: %v", scanErr)
+				continue
+			}
+			if pushedHistoryIDs[id] {
+				continue
+			}
+
+			var invItemID any
+			if inventoryItemID.Valid {
+				invItemID = inventoryItemID.String
+			}
+			var qty any
+			if quantity.Valid {
+				qty = quantity.Int32
+			}
+
+			upsertedHistories = append(upsertedHistories, map[string]any{
+				"id":              id,
+				"shopId":          shopID,
+				"inventoryItemId": invItemID,
+				"itemName":        itemName,
+				"action":          action,
+				"quantity":        qty,
+				"date":            createdAt.Format(time.RFC3339),
+			})
+		}
+		historyChangeRows.Close()
 	}
 
 	// =========================================================================
-	// PHASE 6: TRANSACTION COMMIT AND PAYLOAD DISPATCH
+	// PHASE 6: TRANSACTION COMMIT AND PAYLOAD DISPATCH   (unchanged)
 	// =========================================================================
-	// Everything succeeded atomically! Safely save all batch mutations to disk
 	if errCommit := tx.Commit(ctx); errCommit != nil {
 		log.Printf("🔴 BATCH SYNC: Transaction commit collision: %v", errCommit)
 		return nil, fmt.Errorf("transaction commit collision: %w", errCommit)
 	}
 
-	// Package up all confirmation data and remote deltas for the frontend client
 	return &model.UnifiedBatchSyncPayload{
 		ShopsDelta: &model.DeltaResponse{
 			Upserted:   upsertedShops,
@@ -1364,7 +1591,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		},
 		ServerTime: serverCheckpointTime,
 	}, nil
-
 }
 
 // GetMyShops is the resolver for the getMyShops field.
