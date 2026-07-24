@@ -24,7 +24,7 @@ export const ManualSearchTab = ({ shopId, updateCart }: ManualSearchTabProps) =>
     const [isSearching, setIsSearching] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
 
-    const isSubscribed = true;
+    const isSubscribed = false;
     // 🚀 Stores all alternative items sharing the exact same name
     const [groupedProducts, setGroupedProducts] = useState<Product[]>([]);
     const [showUnitDropdown, setShowUnitDropdown] = useState(false);

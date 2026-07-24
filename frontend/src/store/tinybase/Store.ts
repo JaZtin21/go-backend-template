@@ -14,25 +14,24 @@ export function createShopStore(): Store {
             shopName: { type: 'string' },
             description: { type: 'string' },
             address: { type: 'string' },
-            coordinatesJson: { type: 'string' }, // { lat, lng }
-            photo: { type: 'string' }, // stores the URL string; File objects aren't persisted offline
-            photosJson: { type: 'string' }, // string[]
-            businessHoursJson: { type: 'string' }, // { openTime, closeTime, days }
+            coordinatesJson: { type: 'string' },
+            photo: { type: 'string' },
+            photosJson: { type: 'string' },
+            businessHoursJson: { type: 'string' },
             businessType: { type: 'string' },
-            paymentMethodsJson: { type: 'string' }, // { cash, gcash, paymaya, card }
-            deliveryJson: { type: 'string' }, // { available, radius, fee, minOrder }
-            socialMediaJson: { type: 'string' }, // { facebook, instagram }
-            verificationJson: { type: 'string' }, // { isVerified, verifiedDate, verificationId }
-            contactDetailsJson: { type: 'string' }, // { phone, email, address }
+            paymentMethodsJson: { type: 'string' },
+            deliveryJson: { type: 'string' },
+            socialMediaJson: { type: 'string' },
+            verificationJson: { type: 'string' },
+            contactDetailsJson: { type: 'string' },
             rating: { type: 'number' },
             createdAt: { type: 'string' },
             updatedAt: { type: 'string' },
             createdBy: { type: 'string' },
             status: { type: 'string' },
-            // --- sync tracking ---
-            _dirty: { type: 'boolean', default: false }, // edited offline, not yet pushed
-            _serverSynced: { type: 'boolean', default: false }, // has ever reached the backend
-            _deleted: { type: 'boolean', default: false }, // soft-deleted offline, needs deleting on server too
+            _dirty: { type: 'boolean', default: false },
+            _serverSynced: { type: 'boolean', default: false },
+            _deleted: { type: 'boolean', default: false },
         },
         inventory: {
             shopId: { type: 'string' },
@@ -58,7 +57,7 @@ export function createShopStore(): Store {
             totalCost: { type: 'number' },
             grossSale: { type: 'number' },
             grossProfit: { type: 'number' },
-            itemsJson: { type: 'string' }, // [{ id, inventoryItemId, itemName, quantity, costPrice, sellingPrice, lineCostTotal, lineSaleTotal }]
+            itemsJson: { type: 'string' },
             _dirty: { type: 'boolean', default: false },
             _serverSynced: { type: 'boolean', default: false },
             _deleted: { type: 'boolean', default: false },
@@ -70,7 +69,8 @@ export function createShopStore(): Store {
             action: { type: 'string' },
             quantity: { type: 'number' },
             date: { type: 'string' },
-            _serverSynced: { type: 'boolean', default: false }, // pull-only: server generates these as a side effect of other mutations
+            _dirty: { type: 'boolean', default: false },
+            _serverSynced: { type: 'boolean', default: false },
         },
     });
 }

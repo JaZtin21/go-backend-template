@@ -228,6 +228,29 @@ function fromCheckoutRow(id: string, row: any) {
     };
 }
 
+function recordOfflineItemAction(
+    store: Store,
+    params: {
+        shopId: string;
+        inventoryItemId: string;
+        itemName: string;
+        action: 'added item' | 'edited item' | 'deleted item' | 'added stock';
+        quantity?: number | null;
+    }
+) {
+    const id = crypto.randomUUID();
+    store.setRow('itemActionHistory', id, {
+        shopId: params.shopId,
+        inventoryItemId: params.inventoryItemId,
+        itemName: params.itemName,
+        action: params.action,
+        quantity: params.quantity ?? 0,
+        date: new Date().toISOString(),
+        _dirty: true,
+        _serverSynced: false,
+    });
+}
+
 // =========================================================================
 // QUERIES
 // =========================================================================
@@ -1236,6 +1259,15 @@ export function useAddInventoryItem(opts: MutationCallbacks) {
                     }
                     const row = { ...toItemRow(input), _dirty: true, _serverSynced: false, _deleted: false };
                     store.setRow('inventory', id, row);
+
+                    recordOfflineItemAction(store, {
+                        shopId: row.shopId,
+                        inventoryItemId: id,
+                        itemName: row.itemName,
+                        action: 'added item',
+                        quantity: row.stockQuantity,
+                    });
+
                     opts.onCompleted?.({ addInventoryItem: fromItemRow(id, row) });
                 }
             } catch (err) {
@@ -1297,6 +1329,14 @@ export function useUpdateInventoryItem(opts: MutationCallbacks) {
                         _dirty: true,
                     };
                     store.setRow('inventory', options.variables.itemId, merged);
+
+                    recordOfflineItemAction(store, {
+                        shopId: merged.shopId,
+                        inventoryItemId: options.variables.itemId,
+                        itemName: merged.itemName,
+                        action: 'edited item',
+                    });
+
                     opts.onCompleted?.({ updateInventoryItem: fromItemRow(options.variables.itemId, merged) });
                 }
             } catch (err) {
@@ -1343,6 +1383,15 @@ export function useIncrementStock(opts: MutationCallbacks) {
                     store.setCell('inventory', options.variables.itemId, 'updatedAt', new Date().toISOString());
                     store.setCell('inventory', options.variables.itemId, '_dirty', true);
                     const updated = store.getRow('inventory', options.variables.itemId);
+
+                    recordOfflineItemAction(store, {
+                        shopId: updated.shopId as string,
+                        inventoryItemId: options.variables.itemId,
+                        itemName: updated.itemName as string,
+                        action: 'added stock',
+                        quantity: options.variables.amount,
+                    });
+
                     opts.onCompleted?.({ incrementStock: fromItemRow(options.variables.itemId, updated) });
                 }
             } catch (err) {
@@ -1385,6 +1434,15 @@ export function useDeleteInventoryItem(opts: MutationCallbacks) {
                         store.setPartialRow('inventory', itemId, { _deleted: true, _dirty: true });
                     } else {
                         store.delRow('inventory', itemId);
+                    }
+
+                    if (hasLocalRow) {
+                        recordOfflineItemAction(store, {
+                            shopId: (existing as any).shopId,
+                            inventoryItemId: itemId,
+                            itemName: (existing as any).itemName,
+                            action: 'deleted item',
+                        });
                     }
                 }
                 opts.onCompleted?.();

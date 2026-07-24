@@ -1144,10 +1144,8 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 	}
 
 	// =========================================================================
-	// PHASE 3: PROCESS CHECKOUT TRANSACTIONS BATCH ARRAY (Append-Only)   (unchanged)
+	// PHASE 3: PROCESS CHECKOUT TRANSACTIONS BATCH ARRAY (Append-Only)
 	// =========================================================================
-	// NEW: track which batch ids were just created by *this* push so Phase 5
-	// doesn't also try to pull them back down as if some other device made them.
 	pushedCheckoutIDs := make(map[string]bool)
 
 	for _, c := range input.Checkouts {
@@ -1168,11 +1166,18 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			INSERT INTO checkout_batches (shop_id, sold_at, total_items, total_cost, gross_sale, gross_profit) 
 			VALUES ($1, $2, 0, 0, 0, 0) RETURNING id`, targetShopID, soldAtAnchor).Scan(&batchID)
 		if err != nil {
+			log.Printf("🔴 BATCH SYNC: Failed to create checkout batch header for local ID %s: %v", c.LocalID, err)
 			return nil, err
 		}
 
 		var runningTotalItems int
 		var runningTotalCost, runningGrossSale float64
+
+		// FIX (Bug 6): collect line items as we build them so the response
+		// we hand back for THIS batch is complete. Previously nothing
+		// accumulated these for the response — only for the DB rows — so
+		// the upsertedCheckouts entry below had no `items` at all.
+		var responseItems []map[string]any
 
 		for _, itemInput := range c.Items {
 			resolvedItemID := itemInput.ItemID
@@ -1192,9 +1197,10 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			lineSaleTotal := sellingPrice * float64(itemInput.Quantity)
 
 			_, err = tx.Exec(ctx, `
-				INSERT INTO checkout_batch_items (id, inventory_item_id, item_name, quantity, cost_price, selling_price, line_cost_total, line_sale_total)
+				INSERT INTO checkout_batch_items (checkout_batch_id, inventory_item_id, item_name, quantity, cost_price, selling_price, line_cost_total, line_sale_total)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, batchID, resolvedItemID, itemName, itemInput.Quantity, costPrice, sellingPrice, lineCostTotal, lineSaleTotal)
 			if err != nil {
+				log.Printf("🔴 BATCH SYNC: Failed to insert checkout batch item for batch %s: %v", batchID, err)
 				return nil, err
 			}
 
@@ -1202,6 +1208,16 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			if err != nil {
 				return nil, err
 			}
+
+			responseItems = append(responseItems, map[string]any{
+				"inventoryItemId": resolvedItemID,
+				"itemName":        itemName,
+				"quantity":        itemInput.Quantity,
+				"costPrice":       costPrice,
+				"sellingPrice":    sellingPrice,
+				"lineCostTotal":   lineCostTotal,
+				"lineSaleTotal":   lineSaleTotal,
+			})
 
 			runningTotalItems += itemInput.Quantity
 			runningTotalCost += lineCostTotal
@@ -1217,19 +1233,31 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			return nil, err
 		}
 
-		pushedCheckoutIDs[batchID] = true // NEW
+		pushedCheckoutIDs[batchID] = true
 
+		if responseItems == nil {
+			responseItems = []map[string]any{}
+		}
+
+		// FIX (Bug 6): return the full batch shape, not just id/localId/shopId
 		upsertedCheckouts = append(upsertedCheckouts, map[string]any{
-			"id":      batchID,
-			"localId": c.LocalID,
-			"shopId":  targetShopID,
+			"id":          batchID,
+			"localId":     c.LocalID,
+			"shopId":      targetShopID,
+			"soldAt":      soldAtAnchor.Format(time.RFC3339),
+			"totalItems":  runningTotalItems,
+			"totalCost":   runningTotalCost,
+			"grossSale":   runningGrossSale,
+			"grossProfit": grossProfit,
+			"items":       responseItems,
 		})
 	}
+	log.Printf("PHASE 3: pushed %d checkout batch(es)", len(upsertedCheckouts))
 
 	// =========================================================================
 	// PHASE 4: PROCESS ITEM ACTION HISTORIES ARRAY (Append-Only)   (unchanged)
 	// =========================================================================
-	pushedHistoryIDs := make(map[string]bool) // NEW
+	pushedHistoryIDs := make(map[string]bool)
 
 	for _, h := range input.ActionHistories {
 		targetShopID := h.ShopID
@@ -1265,7 +1293,7 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			return nil, err
 		}
 
-		pushedHistoryIDs[historyID] = true // NEW
+		pushedHistoryIDs[historyID] = true
 
 		upsertedHistories = append(upsertedHistories, map[string]any{
 			"id":              historyID,
@@ -1278,6 +1306,7 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			"date":            createdAtAnchor.Format(time.RFC3339),
 		})
 	}
+	log.Printf("PHASE 4: pushed %d action history record(s)", len(upsertedHistories))
 
 	// =========================================================================
 	// PHASE 5: FETCH GLOBAL DELTAS FROM PULL ANCHORS
@@ -1320,13 +1349,7 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		itemDelRows.Close()
 	}
 
-	// ---- 5b. NEW: full-row upserts changed since lastSyncedAt ----
-	// Covers: fresh installs / wiped local DBs (lastSyncedAt = epoch, so this
-	// pulls everything), plus normal cross-device sync of things this client
-	// didn't just push itself.
-
-	// Build "already pushed by this call" sets so we don't double-return rows
-	// that are already sitting in upsertedShops/upsertedInventory from Phase 1/2.
+	// ---- 5b. full-row upserts changed since lastSyncedAt (shops/inventory, unchanged) ----
 	pushedShopIDs := make(map[string]bool)
 	for _, realID := range shopIDMap {
 		pushedShopIDs[realID] = true
@@ -1366,7 +1389,7 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 				continue
 			}
 			if pushedShopIDs[id] {
-				continue // this client just pushed this shop in Phase 1 — don't duplicate it
+				continue
 			}
 
 			var coordinates, businessHours, paymentMethods, delivery, socialMedia, contactDetails, status, verification any
@@ -1380,10 +1403,7 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			_ = json.Unmarshal(verificationRaw, &verification)
 
 			upsertedShops = append(upsertedShops, map[string]any{
-				"id": id,
-				// deliberately no "localId" — this row didn't come from this
-				// client's dirty queue, so the client-side reconciliation in
-				// syncEngine.ts falls through to its upsert-by-realId path.
+				"id":             id,
 				"shopName":       shopName,
 				"address":        address,
 				"description":    description.String,
@@ -1474,7 +1494,7 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		       ) AS items
 		FROM checkout_batches cb
 		JOIN shops s ON cb.shop_id = s.id
-		LEFT JOIN checkout_batch_items cbi ON cbi.id = cb.id
+		LEFT JOIN checkout_batch_items cbi ON cbi.checkout_batch_id = cb.id
 		WHERE s.owner_id = $1 AND cb.server_updated_at > $2
 		GROUP BY cb.id, cb.shop_id, cb.sold_at, cb.total_items, cb.total_cost, cb.gross_sale, cb.gross_profit
 	`, currentUser.ID, lastSyncedAnchor)
@@ -1563,6 +1583,9 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		}
 		historyChangeRows.Close()
 	}
+
+	log.Printf("PHASE 5: pull results — shops=%d inventory=%d checkouts=%d histories=%d",
+		len(upsertedShops), len(upsertedInventory), len(upsertedCheckouts), len(upsertedHistories))
 
 	// =========================================================================
 	// PHASE 6: TRANSACTION COMMIT AND PAYLOAD DISPATCH   (unchanged)
