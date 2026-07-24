@@ -6,13 +6,19 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vitejs.dev/config https://vitest.dev/config
 export default defineConfig({
-  plugins: [react(), 
-    tailwindcss(),
-    tsconfigPaths(),],
+  plugins: [react(),
+  tailwindcss(),
+  tsconfigPaths(),],
   test: {
     globals: true,
     environment: 'happy-dom',
     setupFiles: '.vitest/setup',
     include: ['**/test.{ts,tsx}']
-  }
+  },
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
 })

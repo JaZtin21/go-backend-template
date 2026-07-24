@@ -1,26 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import { initScannerAssets, getCachedScannerAssets, clearScannerCache } from '~/utils/scannerModelManager';
+import { isOcrEngineReady, recognizeProductText, imageElementToCanvas } from '~/utils/ocrEngine';
+import { resolveProductIdentity, type VisualMatch } from '~/utils/productMatching';
 import { TriangleAlert, ImageIcon, RotateCcw } from 'lucide-react';
 
 interface ProductScannerCameraProps {
     onCaptureComplete: (file: File, previewUrl: string, matchedName: string, unitOfMeasure: string) => void;
-    // 🚀 NEW: when true, a result is currently showing over the live feed.
-    // Capture/gallery disable and a Retry button takes their place.
     hasResult?: boolean;
-    // 🚀 NEW: fired when the Retry button is tapped — parent clears the result state.
     onRetry?: () => void;
 }
 
 const IMG_SIZE = 224;
 const COLOR_WEIGHT = 1.5;
+const TOP_N_CANDIDATES = 10;
 
 export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onRetry }: ProductScannerCameraProps) => {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [isPredicting, setIsPredicting] = useState(false);
-    const [loadPhase, setLoadPhase] = useState<'model' | 'names' | 'embeddings' | 'ready' | 'error'>('model');
+    const [loadPhase, setLoadPhase] = useState<'model' | 'names' | 'embeddings' | 'ocr' | 'ready' | 'error'>('model');
     const [loadProgress, setLoadProgress] = useState(0);
     const [retryCount, setRetryCount] = useState(0);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -33,10 +33,8 @@ export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onR
             if (status.phase === 'ready') {
                 setTimeout(() => setLoadPhase(status.phase), 200);
             } else {
-                setLoadPhase(status.phase)
+                setLoadPhase(status.phase);
             }
-            ;
-
             setLoadProgress(status.progress);
         }).catch((err) => {
             console.error(err);
@@ -106,18 +104,20 @@ export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onR
         });
     };
 
-    const matchProductImage = async (imgElement: HTMLImageElement): Promise<string> => {
+    /** Returns the visual model's top-N candidate product names, ranked closest-first. */
+    const getTopVisualMatches = async (
+        imgElement: HTMLImageElement,
+        topN = TOP_N_CANDIDATES
+    ): Promise<VisualMatch[]> => {
         const { model, names, embeddings } = getCachedScannerAssets();
-        if (!model || !names || !embeddings) {
-            return 'Captured Item';
-        }
+        if (!model || !names || !embeddings) return [];
 
         const inputTensor = preprocessImage(imgElement);
         const predictions = model.predict(inputTensor);
 
         if (!Array.isArray(predictions) || predictions.length < 2) {
             inputTensor.dispose();
-            return 'Captured Item';
+            return [];
         }
 
         const [layoutRaw, colorRaw] = predictions;
@@ -142,17 +142,30 @@ export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onR
         normalizedEmbedding.dispose();
         distances.dispose();
 
-        let minIndex = 0;
-        let minDistance = distancesArray[0];
+        return distancesArray
+            .map((distance, i) => ({ name: names[i], distance }))
+            .sort((a, b) => a.distance - b.distance)
+            .slice(0, topN);
+    };
 
-        for (let i = 1; i < distancesArray.length; i++) {
-            if (distancesArray[i] < minDistance) {
-                minDistance = distancesArray[i];
-                minIndex = i;
-            }
-        }
+    /**
+     * Runs the visual model and OCR in parallel off the same decoded image element,
+     * then resolves the final product name + unit of measure from both results.
+     */
+    const identifyProduct = async (
+        imgElement: HTMLImageElement
+    ): Promise<{ name: string; unitOfMeasure: string }> => {
+        const ocrCanvas = imageElementToCanvas(imgElement);
 
-        return names[minIndex] || 'Unknown Product';
+        const [topCandidates, ocrText] = await Promise.all([
+            getTopVisualMatches(imgElement),
+            isOcrEngineReady() ? recognizeProductText(ocrCanvas) : Promise.resolve(''),
+        ]);
+
+        console.log('[Identify] Visual top candidates:', topCandidates.map(c => `${c.name} (${c.distance.toFixed(3)})`));
+        console.log('[Identify] OCR text:', ocrText);
+
+        return resolveProductIdentity(topCandidates, ocrText);
     };
 
     const handleCameraCapture = () => {
@@ -162,15 +175,12 @@ export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onR
 
         const video = videoRef.current;
 
-        // 1. Get raw hardware video track sizes
         const videoWidth = video.videoWidth;
         const videoHeight = video.videoHeight;
 
-        // 2. Get the visual container rendering sizes from the DOM bounding rect
         const containerWidth = video.clientWidth || 480;
         const containerHeight = video.clientHeight || 640;
 
-        // 3. Create a canvas matching the EXACT aspect ratio proportions of your screen container box
         const canvas = document.createElement('canvas');
         canvas.width = containerWidth;
         canvas.height = containerHeight;
@@ -181,22 +191,19 @@ export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onR
             return;
         }
 
-        // 4. Compute CSS 'object-cover' scaling factor match boundaries
         const scaleX = containerWidth / videoWidth;
         const scaleY = containerHeight / videoHeight;
         const scale = Math.max(scaleX, scaleY);
 
-        // 5. Determine the precise center crop offset pixel coordinates on the raw hardware track frame
         const sourceWidth = containerWidth / scale;
         const sourceHeight = containerHeight / scale;
         const sourceX = (videoWidth - sourceWidth) / 2;
         const sourceY = (videoHeight - sourceHeight) / 2;
 
-        // 6. Draw ONLY the centered cropped box onto your canvas context area canvas sheet
         ctx.drawImage(
             video,
-            sourceX, sourceY, sourceWidth, sourceHeight, // Source crop bounds on the raw video stream
-            0, 0, containerWidth, containerHeight        // Destination bounds matching the visible box layout
+            sourceX, sourceY, sourceWidth, sourceHeight,
+            0, 0, containerWidth, containerHeight
         );
 
         canvas.toBlob((blob) => {
@@ -211,35 +218,15 @@ export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onR
             const tempImg = new Image();
             tempImg.src = previewUrl;
             tempImg.onload = async () => {
-                const matchedName = await matchProductImage(tempImg);
+                const { name: cleanName, unitOfMeasure } = await identifyProduct(tempImg);
 
-                // 🚀 NOTE: camera is intentionally left running here.
-                // The live feed should keep going behind the AI Result card —
-                // it only stops when this component unmounts (e.g. moving to the manual form)
-                // or the user backs out of the scanner entirely.
+                // 🚀 Camera intentionally left running — behind the AI Result card.
 
-                let cleanName = matchedName;
-                let unitOfMeasure = '';
-
-                const measureRegex = /(\d+(?:\.\d+)?\s*(?:g|kg|ml|l|oz|pcs|pc|pack|pk|bx|bags))$/i;
-                const match = matchedName.match(measureRegex);
-
-                if (match) {
-                    unitOfMeasure = match[1].toLowerCase().replace(/\s+/g, '');
-                    cleanName = matchedName.replace(measureRegex, '').trim();
-                }
-
-                if (cleanName.endsWith('-') || cleanName.endsWith(',')) {
-                    cleanName = cleanName.slice(0, -1).trim();
-                }
-
-                setIsPredicting(false); // 🚀 reset so buttons re-enable correctly once retry happens
+                setIsPredicting(false);
                 onCaptureComplete(capturedFile, previewUrl, cleanName, unitOfMeasure);
             };
         }, 'image/jpeg', 0.85);
-
     };
-
 
     const handleRetryLoading = async () => {
         setLoadPhase('model');
@@ -266,38 +253,21 @@ export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onR
         const tempImg = new Image();
         tempImg.src = previewUrl;
         tempImg.onload = async () => {
-            const matchedName = await matchProductImage(tempImg);
+            const { name: cleanName, unitOfMeasure } = await identifyProduct(tempImg);
 
             // 🚀 Camera intentionally left running — same as handleCameraCapture above.
 
-            let cleanName = matchedName;
-            let unitOfMeasure = '';
-
-            const measureRegex = /(\d+(?:\.\d+)?\s*(?:g|kg|ml|l|oz|pcs|pc|pack|pk|bx|bags))$/i;
-            const match = matchedName.match(measureRegex);
-
-            if (match) {
-                unitOfMeasure = match[1].toLowerCase().replace(/\s+/g, '');
-                cleanName = matchedName.replace(measureRegex, '').trim();
-            }
-
-            if (cleanName.endsWith('-') || cleanName.endsWith(',')) {
-                cleanName = cleanName.slice(0, -1).trim();
-            }
-
-            setIsPredicting(false); // 🚀 reset so buttons re-enable correctly once retry happens
+            setIsPredicting(false);
             onCaptureComplete(file, previewUrl, cleanName, unitOfMeasure);
         };
     };
 
     const handleRetryTap = () => {
-        // Reset the file input so re-selecting the same gallery file later still fires onChange
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
         onRetry?.();
     };
-
 
     if (loadPhase !== 'ready') {
         return (
@@ -327,6 +297,7 @@ export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onR
                                 {loadPhase === 'model' && 'Downloading Neural Weights...'}
                                 {loadPhase === 'names' && 'Syncing Registry Catalog...'}
                                 {loadPhase === 'embeddings' && 'Loading Vector Gallery...'}
+                                {loadPhase === 'ocr' && 'Preparing Text Recognition...'}
                             </div>
                             <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden mt-1">
                                 <div className="bg-[var(--color-brand-gold)] h-full transition-all duration-150 ease-out" style={{ width: `${loadProgress}%` }} />
@@ -397,8 +368,6 @@ export const ProductScannerCamera = ({ onCaptureComplete, hasResult = false, onR
                                 className="w-14 h-14 rounded-full bg-[#d9d9d9] hover:bg-white border-4 border-[#3f3f3f]/40 shadow-lg transition-all duration-200 cursor-pointer active:scale-95 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
                             />
 
-                            {/* 🚀 NEW: Retry button — takes the place of the third (help) slot,
-                                only appears once a result is showing over the live feed. */}
                             {hasResult && (
                                 <button
                                     type="button"

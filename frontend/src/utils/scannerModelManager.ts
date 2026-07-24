@@ -1,13 +1,15 @@
 import * as tf from '@tensorflow/tfjs';
+import { initOcrEngine } from '~/utils/ocrEngine';
 
 interface LoadingProgress {
-    phase: 'model' | 'names' | 'embeddings' | 'ready' | 'error';
+    phase: 'model' | 'names' | 'embeddings' | 'ocr' | 'ready' | 'error';
     progress: number;
 }
 
 let modelCache: tf.LayersModel | null = null;
 let namesCache: string[] | null = null;
 let embeddingsCache: tf.Tensor2D | null = null;
+let ocrLoaded = false;
 let activeLoadingPromise: Promise<void> | null = null;
 
 const trackDownload = (url: string, onProgress: (pct: number) => void): Promise<any> => {
@@ -36,7 +38,6 @@ const trackDownload = (url: string, onProgress: (pct: number) => void): Promise<
                 if (url === '/reference_embeddings.bin') {
                     setTimeout(() => resolve(xhr.response), 500);
                 } else {
-                    // Instantly resolve all other supporting files with zero delay!
                     resolve(xhr.response);
                 }
             } else {
@@ -54,7 +55,7 @@ export const getCachedScannerAssets = () => {
         model: modelCache,
         names: namesCache,
         embeddings: embeddingsCache,
-        isLoaded: !!(modelCache && namesCache && embeddingsCache)
+        isLoaded: !!(modelCache && namesCache && embeddingsCache && ocrLoaded)
     };
 };
 
@@ -62,6 +63,7 @@ export const clearScannerCache = async (): Promise<void> => {
     modelCache = null;
     namesCache = null;
     embeddingsCache = null;
+    ocrLoaded = false;
     activeLoadingPromise = null;
 
     try {
@@ -71,9 +73,8 @@ export const clearScannerCache = async (): Promise<void> => {
     }
 };
 
-
 export const initScannerAssets = (onProgress: (status: LoadingProgress) => void): Promise<void> => {
-    if (modelCache && namesCache && embeddingsCache) {
+    if (modelCache && namesCache && embeddingsCache && ocrLoaded) {
         onProgress({ phase: 'ready', progress: 100 });
         return Promise.resolve();
     }
@@ -82,30 +83,31 @@ export const initScannerAssets = (onProgress: (status: LoadingProgress) => void)
         return activeLoadingPromise;
     }
 
+    // Four phases now share the bar: model / names / embeddings / ocr, each a quarter.
     activeLoadingPromise = (async () => {
         try {
             try {
                 modelCache = await tf.loadLayersModel('indexeddb://product-matcher-model');
-                onProgress({ phase: 'model', progress: 33 });
+                onProgress({ phase: 'model', progress: 25 });
             } catch (e) {
                 onProgress({ phase: 'model', progress: 5 });
                 modelCache = await tf.loadLayersModel('/tfjs_model/model.json');
                 await modelCache.save('indexeddb://product-matcher-model');
-                onProgress({ phase: 'model', progress: 33 });
+                onProgress({ phase: 'model', progress: 25 });
             }
 
-            onProgress({ phase: 'names', progress: 33 });
+            onProgress({ phase: 'names', progress: 25 });
             const namesData = await trackDownload('/reference_class_names.json', (pct) => {
-                const scaledProgress = 33 + Math.round((pct / 100) * 33);
-                onProgress({ phase: 'names', progress: Math.min(scaledProgress, 66) });
+                const scaledProgress = 25 + Math.round((pct / 100) * 25);
+                onProgress({ phase: 'names', progress: Math.min(scaledProgress, 50) });
             });
             namesCache = namesData.class_names;
-            onProgress({ phase: 'names', progress: 66 });
+            onProgress({ phase: 'names', progress: 50 });
 
-            onProgress({ phase: 'embeddings', progress: 66 });
+            onProgress({ phase: 'embeddings', progress: 50 });
             const binBuffer = await trackDownload('/reference_embeddings.bin', (pct) => {
-                const scaledProgress = 66 + Math.round((pct / 100) * 34);
-                onProgress({ phase: 'embeddings', progress: Math.min(scaledProgress, 99) });
+                const scaledProgress = 50 + Math.round((pct / 100) * 25);
+                onProgress({ phase: 'embeddings', progress: Math.min(scaledProgress, 75) });
             });
 
             const flatEmbeddings = new Float32Array(binBuffer);
@@ -113,17 +115,22 @@ export const initScannerAssets = (onProgress: (status: LoadingProgress) => void)
                 namesData.num_classes,
                 namesData.embedding_dim
             ]);
+            onProgress({ phase: 'embeddings', progress: 75 });
 
-            // 🎯 HERE IS THE CLEAN TIMEOUT: Holds the 100% state exactly where you need it 
-            onProgress({ phase: 'embeddings', progress: 100 });
+            // OCR engine download + init — no native progress events from the library,
+            // so we just bracket it with a start/end tick on the same bar.
+            onProgress({ phase: 'ocr', progress: 80 });
+            await initOcrEngine();
+            ocrLoaded = true;
+            onProgress({ phase: 'ocr', progress: 100 });
 
-            // Finally trigger the transition step flag
             onProgress({ phase: 'ready', progress: 100 });
         } catch (err) {
             activeLoadingPromise = null;
             modelCache = null;
             namesCache = null;
             embeddingsCache = null;
+            ocrLoaded = false;
             onProgress({ phase: 'error', progress: 0 });
             throw err;
         }
