@@ -372,7 +372,7 @@ func (r *mutationResolver) DeleteShop(ctx context.Context, shopID string) (bool,
 	var oldPrimaryPhoto *string
 	var oldPhotosSlice []string
 
-	checkQuery := "SELECT owner_id, photo, photos FROM shops WHERE id = $1 LIMIT 1"
+	checkQuery := "SELECT owner_id, photo, photos FROM shops WHERE id = $1 AND deleted_at IS NULL LIMIT 1"
 	err := r.Resolver.DB.QueryRow(ctx, checkQuery, shopID).Scan(&dbOwnerID, &oldPrimaryPhoto, &oldPhotosSlice)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -392,6 +392,25 @@ func (r *mutationResolver) DeleteShop(ctx context.Context, shopID string) (bool,
 			Extensions: map[string]interface{}{"code": "FORBIDDEN"},
 		})
 		return false, nil
+	}
+
+	// NEW: collect photo URLs for every non-deleted inventory item under
+	// this shop too — the old hard-delete relied on ON DELETE CASCADE to
+	// wipe these rows, but that cascade never cleaned up their Cloudinary
+	// images either, so this was already an orphaned-asset gap; folding it
+	// in here since we're touching this cascade anyway.
+	invRows, err := r.Resolver.DB.Query(ctx, `SELECT photo FROM inventory_items WHERE shop_id = $1 AND deleted_at IS NULL`, shopID)
+	var inventoryPhotos []string
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch inventory photos for shop %s cleanup: %v", shopID, err)
+	} else {
+		for invRows.Next() {
+			var p *string
+			if scanErr := invRows.Scan(&p); scanErr == nil && p != nil && *p != "" {
+				inventoryPhotos = append(inventoryPhotos, *p)
+			}
+		}
+		invRows.Close()
 	}
 
 	// 1. INITIALIZE THE CLOUDINARY UPLOADER UTILITY DIRECTLY VIA OS ENVS
@@ -425,12 +444,68 @@ func (r *mutationResolver) DeleteShop(ctx context.Context, shopID string) (bool,
 		}
 	}
 
-	// 4. DATABASE ROW ELIMINATION
-	deleteQuery := "DELETE FROM shops WHERE id = $1"
-	_, err = r.Resolver.DB.Exec(ctx, deleteQuery, shopID)
+	// NEW: clean up inventory item photos (separate folder from shop photos)
+	inventoryUploadFolder := fmt.Sprintf("%s/%s/shops/%s/inventory", os.Getenv("CLOUDINARY_FOLDER"), currentUser.ID, shopID)
+	inventoryUploader := uploader.WithFolder(inventoryUploadFolder)
+	for _, oldURL := range inventoryPhotos {
+		if cleanErr := inventoryUploader.DeleteImageByURL(ctx, oldURL); cleanErr != nil {
+			log.Printf("⚠️ Failed to remove inventory image %s during shop deletion: %v", oldURL, cleanErr)
+		}
+	}
+
+	// 4. CASCADE THE DELETION ATOMICALLY
+	//
+	//   - shops:            soft delete (tombstone — needed so pull-sync on
+	//                        other devices can detect this shop is gone)
+	//   - inventory_items:  soft delete (same reason — a device with this
+	//                        shop's items cached locally needs a tombstone
+	//                        to know to drop them)
+	//   - checkout_batches / checkout_batch_items / item_action_history:
+	//                        hard delete. syncEngine.ts's frontend never
+	//                        reads checkoutsDelta.deletedIds or
+	//                        actionHistoriesDelta.deletedIds today — those
+	//                        tables are append-only client-side — so a
+	//                        tombstone there would never get consumed.
+	//                        Hard-deleting is correct until that changes.
+	tx, err := r.Resolver.DB.Begin(ctx)
 	if err != nil {
+		log.Printf("🔴 FAILED TO ACQUIRE TRANSACTION IN DELETESHOP: %v", err)
+		return false, fmt.Errorf("internal server error")
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err = tx.Exec(ctx, `
+		DELETE FROM checkout_batch_items
+		WHERE inventory_item_id IN (SELECT id FROM inventory_items WHERE shop_id = $1)
+		   OR id IN (SELECT id FROM checkout_batches WHERE shop_id = $1)
+	`, shopID); err != nil {
+		log.Printf("🔴 FAILED TO CLEAR CHECKOUT ITEMS FOR SHOP %s: %v", shopID, err)
+		return false, err
+	}
+
+	if _, err = tx.Exec(ctx, `DELETE FROM checkout_batches WHERE shop_id = $1`, shopID); err != nil {
+		log.Printf("🔴 FAILED TO CLEAR CHECKOUT BATCHES FOR SHOP %s: %v", shopID, err)
+		return false, err
+	}
+
+	if _, err = tx.Exec(ctx, `DELETE FROM item_action_history WHERE shop_id = $1`, shopID); err != nil {
+		log.Printf("🔴 FAILED TO CLEAR ACTION HISTORY FOR SHOP %s: %v", shopID, err)
+		return false, err
+	}
+
+	if _, err = tx.Exec(ctx, `UPDATE inventory_items SET deleted_at = NOW() WHERE shop_id = $1 AND deleted_at IS NULL`, shopID); err != nil {
+		log.Printf("🔴 FAILED TO SOFT-DELETE INVENTORY FOR SHOP %s: %v", shopID, err)
+		return false, err
+	}
+
+	if _, err = tx.Exec(ctx, `UPDATE shops SET deleted_at = NOW() WHERE id = $1 AND owner_id = $2`, shopID, currentUser.ID); err != nil {
 		log.Printf("🔴 DATABASE DELETION FAILED IN DELETESHOP: %v", err)
 		return false, err
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		log.Printf("🔴 TRANSACTION COMMIT FAILED IN DELETESHOP: %v", err)
+		return false, fmt.Errorf("internal server error")
 	}
 
 	return true, nil
@@ -695,7 +770,7 @@ func (r *mutationResolver) DeleteInventoryItem(ctx context.Context, itemID strin
 	checkQuery := `
 		SELECT s.owner_id, i.photo, i.shop_id, i.item_name FROM inventory_items i
 		JOIN shops s ON i.shop_id = s.id
-		WHERE i.id = $1 LIMIT 1
+		WHERE i.id = $1 AND i.deleted_at IS NULL LIMIT 1
 	`
 	err := r.Resolver.DB.QueryRow(ctx, checkQuery, itemID).Scan(&shopOwnerID, &oldPhoto, &shopID, &itemName)
 	if err != nil {
@@ -741,9 +816,12 @@ func (r *mutationResolver) DeleteInventoryItem(ctx context.Context, itemID strin
 		}
 	}
 
-	// 3. DATABASE ROW ELIMINATION
-	deleteQuery := "DELETE FROM inventory_items WHERE id = $1"
-	_, err = r.Resolver.DB.Exec(ctx, deleteQuery, itemID)
+	// 3. SOFT-DELETE THE ROW (tombstone) — same reasoning as DeleteShop.
+	// Joined through shops via shop_id since inventory_items has no
+	// owner_id column of its own; shopID/ownership was already verified
+	// above via checkQuery.
+	deleteQuery := "UPDATE inventory_items SET deleted_at = NOW() WHERE id = $1 AND shop_id = $2"
+	_, err = r.Resolver.DB.Exec(ctx, deleteQuery, itemID, shopID)
 	if err != nil {
 		log.Printf("🔴 DATABASE DELETION FAILED IN DELETEINVENTORYITEM: %v", err)
 		return false, err
@@ -978,10 +1056,73 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 	var upsertedHistories []map[string]any
 
 	// =========================================================================
-	// PHASE 1: PROCESS SHOPS BATCH ARRAY   (unchanged)
+	// PHASE 1: PROCESS SHOPS BATCH ARRAY
 	// =========================================================================
 	for _, s := range input.Shops {
 		if s.IsDeleted {
+			// FIX: cascade the deletion — same shape as the single-resolver
+			// DeleteShop mutation. Without this, a shop soft-deleted through
+			// batch sync leaves its inventory items behind with no
+			// deleted_at, so they never tombstone for other devices, and
+			// (per the previous fix) an offline edit to one of those
+			// orphaned items would still pass the `deleted_at IS NULL`
+			// check and silently succeed even though its shop is gone.
+			//
+			// checkout_batches / checkout_batch_items / item_action_history
+			// are hard-deleted, not soft-deleted, for the same reason as in
+			// DeleteShop: syncEngine.ts never reads checkoutsDelta.deletedIds
+			// or actionHistoriesDelta.deletedIds today, so a tombstone there
+			// would never be consumed.
+			if _, err = tx.Exec(ctx, `
+				DELETE FROM checkout_batch_items
+				WHERE inventory_item_id IN (SELECT id FROM inventory_items WHERE shop_id = $1)
+				   OR checkout_batch_id IN (SELECT id FROM checkout_batches WHERE shop_id = $1)
+			`, s.LocalID); err != nil {
+				log.Printf("🔴 BATCH SYNC: Failed to clear checkout items for shop %s: %v", s.LocalID, err)
+				return nil, err
+			}
+
+			if _, err = tx.Exec(ctx, `DELETE FROM checkout_batches WHERE shop_id = $1`, s.LocalID); err != nil {
+				log.Printf("🔴 BATCH SYNC: Failed to clear checkout batches for shop %s: %v", s.LocalID, err)
+				return nil, err
+			}
+
+			if _, err = tx.Exec(ctx, `DELETE FROM item_action_history WHERE shop_id = $1`, s.LocalID); err != nil {
+				log.Printf("🔴 BATCH SYNC: Failed to clear action history for shop %s: %v", s.LocalID, err)
+				return nil, err
+			}
+
+			var cascadedItemIDs []string
+			cascadeRows, cascadeErr := tx.Query(ctx, `
+				UPDATE inventory_items SET deleted_at = NOW()
+				WHERE shop_id = $1 AND deleted_at IS NULL
+				RETURNING id
+			`, s.LocalID)
+			if cascadeErr != nil {
+				log.Printf("🔴 BATCH SYNC: Failed to soft-delete inventory for shop %s: %v", s.LocalID, cascadeErr)
+				return nil, cascadeErr
+			}
+			for cascadeRows.Next() {
+				var id string
+				if scanErr := cascadeRows.Scan(&id); scanErr == nil {
+					cascadedItemIDs = append(cascadedItemIDs, id)
+				}
+			}
+			cascadeRows.Close()
+
+			// Tell this client's own sync response about every item that
+			// just got cascade-deleted, so its own TinyBase/Redux drop them
+			// too — not just the shop itself. Without this, THIS client
+			// (the one that pushed the shop deletion) wouldn't find out
+			// about its own cascade until some later sync.
+			for _, itemID := range cascadedItemIDs {
+				upsertedInventory = append(upsertedInventory, map[string]any{
+					"id":        itemID,
+					"localId":   itemID,
+					"isDeleted": true,
+				})
+			}
+
 			_, err = tx.Exec(ctx, `UPDATE shops SET deleted_at = NOW() WHERE id = $1 AND owner_id = $2`, s.LocalID, currentUser.ID)
 			if err != nil {
 				log.Printf("🔴 BATCH SYNC: Failed to soft-delete shop %s: %v", s.LocalID, err)
@@ -1006,11 +1147,14 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		var finalCreatedAt time.Time
 
 		if s.IsServerSynced {
+			// FIX: AND deleted_at IS NULL — without this, editing a shop
+			// that was soft-deleted on another device silently revives it
+			// (the UPDATE succeeds and looks like a normal edit).
 			query := `
 				UPDATE shops SET 
 					shop_name = $1, address = $2, description = $3, photo = $4, photos = $5,
 					business_hours = $6, payment_methods = $7, delivery = $8, social_media = $9, contact_details = $10, coordinates = $11
-				WHERE id = $12 AND owner_id = $13
+				WHERE id = $12 AND owner_id = $13 AND deleted_at IS NULL
 				RETURNING id, created_at
 			`
 			err = tx.QueryRow(ctx, query,
@@ -1018,6 +1162,20 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 				hoursJSON, paymentsJSON, deliveryJSON, socialJSON, contactJSON, coordinatesJSON,
 				s.LocalID, currentUser.ID,
 			).Scan(&finalServerID, &finalCreatedAt)
+
+			// FIX: the shop was already soft-deleted elsewhere between this
+			// client's last sync and now — the UPDATE matched zero rows.
+			// Report it as a deletion instead of falling into the generic
+			// error handler below (which would fail the whole batch) or
+			// silently treating it as a successful edit.
+			if errors.Is(err, pgx.ErrNoRows) {
+				upsertedShops = append(upsertedShops, map[string]any{
+					"id":        s.LocalID,
+					"localId":   s.LocalID,
+					"isDeleted": true,
+				})
+				continue
+			}
 		} else {
 			createdAtAnchor := time.Now()
 			if s.ClientCreatedAt != nil {
@@ -1068,7 +1226,7 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 	}
 
 	// =========================================================================
-	// PHASE 2: PROCESS INVENTORY ITEMS BATCH ARRAY   (unchanged)
+	// PHASE 2: PROCESS INVENTORY ITEMS BATCH ARRAY
 	// =========================================================================
 	for _, item := range input.Inventory {
 		targetShopID := item.ShopID
@@ -1092,11 +1250,12 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 
 		var finalItemID string
 		if item.IsServerSynced {
+			// FIX: AND deleted_at IS NULL — same reasoning as the shops UPDATE above.
 			query := `
 				UPDATE inventory_items SET 
 					item_name = $1, description = $2, barcode = $3, category = $4, unit_of_measure = $5,
 					cost_price = $6, selling_price = $7, stock_quantity = $8, reorder_level = $9, photo = $10
-				WHERE id = $11 AND shop_id = $12
+				WHERE id = $11 AND shop_id = $12 AND deleted_at IS NULL
 				RETURNING id
 			`
 			err = tx.QueryRow(ctx, query,
@@ -1104,6 +1263,17 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 				item.CostPrice, item.SellingPrice, item.StockQuantity, item.ReorderLevel, item.Photo,
 				item.LocalID, targetShopID,
 			).Scan(&finalItemID)
+
+			// FIX: item was already soft-deleted elsewhere — report as a
+			// deletion instead of silently reviving it or erroring the batch.
+			if errors.Is(err, pgx.ErrNoRows) {
+				upsertedInventory = append(upsertedInventory, map[string]any{
+					"id":        item.LocalID,
+					"localId":   item.LocalID,
+					"isDeleted": true,
+				})
+				continue
+			}
 		} else {
 			query := `
 				INSERT INTO inventory_items (
@@ -1172,11 +1342,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 
 		var runningTotalItems int
 		var runningTotalCost, runningGrossSale float64
-
-		// FIX (Bug 6): collect line items as we build them so the response
-		// we hand back for THIS batch is complete. Previously nothing
-		// accumulated these for the response — only for the DB rows — so
-		// the upsertedCheckouts entry below had no `items` at all.
 		var responseItems []map[string]any
 
 		for _, itemInput := range c.Items {
@@ -1239,7 +1404,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 			responseItems = []map[string]any{}
 		}
 
-		// FIX (Bug 6): return the full batch shape, not just id/localId/shopId
 		upsertedCheckouts = append(upsertedCheckouts, map[string]any{
 			"id":          batchID,
 			"localId":     c.LocalID,
@@ -1255,7 +1419,7 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 	log.Printf("PHASE 3: pushed %d checkout batch(es)", len(upsertedCheckouts))
 
 	// =========================================================================
-	// PHASE 4: PROCESS ITEM ACTION HISTORIES ARRAY (Append-Only)   (unchanged)
+	// PHASE 4: PROCESS ITEM ACTION HISTORIES ARRAY (Append-Only)
 	// =========================================================================
 	pushedHistoryIDs := make(map[string]bool)
 
@@ -1318,7 +1482,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		lastSyncedAnchor = time.Unix(0, 0)
 	}
 
-	// ---- 5a. Deletions (unchanged) ----
 	var deletedShops []string
 	shopDelRows, err := tx.Query(ctx, `SELECT id FROM shops WHERE owner_id = $1 AND deleted_at > $2`, currentUser.ID, lastSyncedAnchor)
 	if err == nil {
@@ -1349,7 +1512,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		itemDelRows.Close()
 	}
 
-	// ---- 5b. full-row upserts changed since lastSyncedAt (shops/inventory, unchanged) ----
 	pushedShopIDs := make(map[string]bool)
 	for _, realID := range shopIDMap {
 		pushedShopIDs[realID] = true
@@ -1359,7 +1521,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		pushedItemIDs[realID] = true
 	}
 
-	// --- shops ---
 	shopChangeRows, err := tx.Query(ctx, `
 		SELECT id, shop_name, address, description, photo, photos, coordinates,
 		       business_hours, payment_methods, delivery, social_media, contact_details,
@@ -1423,7 +1584,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		shopChangeRows.Close()
 	}
 
-	// --- inventory items ---
 	itemChangeRows, err := tx.Query(ctx, `
 		SELECT i.id, i.shop_id, i.item_name, i.description, i.barcode, i.category, i.unit_of_measure,
 		       i.cost_price, i.selling_price, i.stock_quantity, i.reorder_level, i.photo, i.server_updated_at
@@ -1475,7 +1635,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		itemChangeRows.Close()
 	}
 
-	// --- checkout batches (append-only — no deletedIds needed) ---
 	checkoutChangeRows, err := tx.Query(ctx, `
 		SELECT cb.id, cb.shop_id, cb.sold_at, cb.total_items, cb.total_cost, cb.gross_sale, cb.gross_profit,
 		       COALESCE(
@@ -1535,7 +1694,6 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		checkoutChangeRows.Close()
 	}
 
-	// --- item action histories (append-only) ---
 	historyChangeRows, err := tx.Query(ctx, `
 		SELECT h.id, h.shop_id, h.inventory_item_id, h.item_name, h.action, h.quantity, h.created_at
 		FROM item_action_history h
@@ -1588,7 +1746,7 @@ func (r *mutationResolver) UnifiedBatchSync(ctx context.Context, input model.Uni
 		len(upsertedShops), len(upsertedInventory), len(upsertedCheckouts), len(upsertedHistories))
 
 	// =========================================================================
-	// PHASE 6: TRANSACTION COMMIT AND PAYLOAD DISPATCH   (unchanged)
+	// PHASE 6: TRANSACTION COMMIT AND PAYLOAD DISPATCH
 	// =========================================================================
 	if errCommit := tx.Commit(ctx); errCommit != nil {
 		log.Printf("🔴 BATCH SYNC: Transaction commit collision: %v", errCommit)

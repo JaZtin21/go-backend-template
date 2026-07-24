@@ -12,7 +12,7 @@ export const SalesHistoryPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'checkout' | 'actions'>('checkout');
   const [checkoutOffset, setCheckoutOffset] = useState(0);
   const [actionsOffset, setActionsOffset] = useState(0);
-  const isSubscribed = false;
+  const isSubscribed = true;
 
   const checkoutQuery = useCheckoutHistory({
     shopId: shopId || '',
@@ -99,8 +99,8 @@ export const SalesHistoryPage: React.FC = () => {
             ) : (
               <div className="flex flex-col gap-4">
                 {checkoutData?.batches.map((batch) => (
-                  <div key={batch.id} className="rounded-2xl border border-border-main bg-bg-secondary/40 p-4">
-                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 pb-4 border-b border-border-sub/60">
+                  <div key={batch.id} className="rounded-2xl border border-border-main ">
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 pb-4 p-4 ">
                       <div>
                         <h3 className="text-sm font-bold text-text-main">Batch #{batch.id.slice(0, 8)}</h3>
                         <p className="text-xs text-text-muted mt-1">Sold at {formatDate(batch.soldAt)}</p>
@@ -112,7 +112,7 @@ export const SalesHistoryPage: React.FC = () => {
                         <div><span className="text-text-muted block">Gross Profit</span><span className="font-bold text-brand-green">{formatCurrency(batch.grossProfit)}</span></div>
                       </div>
                     </div>
-                    <div className="overflow-x-auto mt-4 max-h-[200px] bg-brand-gold/10  rounded-xl">
+                    <div className="overflow-x-auto  max-h-[200px] bg-brand-gold/10  rounded-2xl">
                       <table className="w-full min-w-[700px] text-left border-collapse">
                         <thead className='sticky top-0 bg-brand-gold '>
                           <tr className="border-b border-border-sub/40 text-text-white text-xs font-bold uppercase tracking-wider h-10">
@@ -174,7 +174,6 @@ export const SalesHistoryPage: React.FC = () => {
                   <thead>
                     <tr className="border-b border-border-sub/40 text-text-muted text-xs font-bold uppercase tracking-wider h-12">
                       <th>Action</th>
-                      <th>Item ID</th>
                       <th>Item Name</th>
                       <th>Quantity</th>
                       <th>Date</th>
@@ -184,7 +183,6 @@ export const SalesHistoryPage: React.FC = () => {
                     {actionData?.records.map((record) => (
                       <tr key={record.id} className="hover:bg-item-hover/20 transition-colors h-12">
                         <td className="font-bold text-text-main capitalize">{record.action}</td>
-                        <td className="text-text-muted">{record.inventoryItemId || '--'}</td>
                         <td>{record.itemName}</td>
                         <td>{record.quantity ?? '--'}</td>
                         <td>{formatDate(record.date)}</td>
