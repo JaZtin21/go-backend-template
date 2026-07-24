@@ -49,23 +49,6 @@ export const SalesHistoryPage: React.FC = () => {
   const currentError = activeTab === 'checkout' ? checkoutQuery.error : itemActionsQuery.error;
   const isLoading = activeTab === 'checkout' ? checkoutQuery.loading : itemActionsQuery.loading;
 
-  const headerStats = useMemo(() => {
-    if (activeTab === 'checkout') {
-      const batches = checkoutData?.batches || [];
-      const grossSale = batches.reduce((sum, batch) => sum + Number(batch.grossSale || 0), 0);
-      return {
-        label: 'Recorded checkout batches',
-        total: checkoutData?.totalCount || 0,
-        secondary: `Visible gross sales: ${formatCurrency(grossSale)}`,
-      };
-    }
-
-    return {
-      label: 'Recorded inventory actions',
-      total: actionData?.totalCount || 0,
-      secondary: 'Includes add item, edit item, delete item, and added stock events',
-    };
-  }, [activeTab, checkoutData, actionData]);
 
   return (
     <div className="w-full min-h-screen text-text-main flex flex-col gap-2">
@@ -80,16 +63,7 @@ export const SalesHistoryPage: React.FC = () => {
       </div>
 
       <div className="w-full bg-bg-primary border border-border-main rounded-xl md:p-6 p-4 flex flex-col gap-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pb-4 border-b border-border-sub">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-text-main">Sales & History</h1>
-            <p className="text-sm text-text-muted mt-1">Track checkout batches and inventory activity for this shop.</p>
-          </div>
-          <div className="text-xs text-text-muted font-medium bg-bg-secondary px-3 py-2 rounded-lg border border-border-sub">
-            <div>{headerStats.label}: <span className="text-text-main font-bold">{headerStats.total}</span></div>
-            <div className="mt-1">{headerStats.secondary}</div>
-          </div>
-        </div>
+
 
         <div className="flex bg-bg-secondary rounded-full w-full max-w-lg border border-border-main">
           <button
@@ -138,12 +112,11 @@ export const SalesHistoryPage: React.FC = () => {
                         <div><span className="text-text-muted block">Gross Profit</span><span className="font-bold text-brand-green">{formatCurrency(batch.grossProfit)}</span></div>
                       </div>
                     </div>
-                    <div className="overflow-x-auto mt-4">
+                    <div className="overflow-x-auto mt-4 max-h-[200px] bg-brand-gold/10  rounded-xl">
                       <table className="w-full min-w-[700px] text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-border-sub/40 text-text-muted text-xs font-bold uppercase tracking-wider h-10">
-                            <th>Item ID</th>
-                            <th>Item Name</th>
+                        <thead className='sticky top-0 bg-brand-gold '>
+                          <tr className="border-b border-border-sub/40 text-text-white text-xs font-bold uppercase tracking-wider h-10">
+                            <th className="pl-4 ">Item Name</th>
                             <th>Qty</th>
                             <th>Cost Price</th>
                             <th>Selling Price</th>
@@ -154,8 +127,7 @@ export const SalesHistoryPage: React.FC = () => {
                         <tbody className="divide-y divide-border-sub/20 text-sm font-medium">
                           {batch.items.map((item: any) => (
                             <tr key={item.id} className="h-11">
-                              <td className="text-text-muted">{item.inventoryItemId}</td>
-                              <td className="font-semibold text-text-main">{item.itemName}</td>
+                              <td className="font-semibold text-text-main pl-4">{item.itemName}</td>
                               <td>{item.quantity}</td>
                               <td>{formatCurrency(item.costPrice)}</td>
                               <td>{formatCurrency(item.sellingPrice)}</td>
